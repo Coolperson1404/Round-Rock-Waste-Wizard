@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Waste Wizard">
+<meta name="description" content="Round Rock, Texas — find out what goes in trash, recycling, or a drop-off center.">
+<title>Waste Wizard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='23' fill='%23111'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M41 27 20 65'/%3E%3Cpath d='M31 57 20 65l14 1'/%3E%3Cpath d='M74 56 53 18'/%3E%3Cpath d='M53 32V18l12 7'/%3E%3Cpath d='M33 71h43'/%3E%3Cpath d='M64 62l12 9-12 8'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+:root{
+  --f-large:36px; --f-body:18px; --f-sub:16px; --f-foot:13px;
+  --scale:1;
+
+  /* every value below is contrast-checked: text colours ≥4.5:1, UI glyphs ≥3:1 */
+  --ink:#0B0C0D;                          /* 19.6:1 on white */
+  --ink2:#5A6068;                         /* 6.35:1 — secondary text */
+  --ink3:#8C939B;                         /* 3.11:1 — chevrons/rules only, never text */
+  --bg:#FFFFFF;
+  --line:#E4E6E8;
+  --fill:#F4F5F6;
+  --accent:#0E6E7D;                       /* 5.92:1 on white */
+
+  /* destination colours — white text on each is ≥5.9:1 */
+  --c-recycle:#12569F; --c-trash:#4A5158; --c-center:#0E6E7D;
+  --c-hhw:#9A4A07; --c-brush:#276B3C; --c-bulk:#463C9E; --c-other:#94123F;
+
+  --safeb:env(safe-area-inset-bottom,0px);
+  --safet:env(safe-area-inset-top,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --ink:#F7F8F8; --ink2:#A6ADB5; --ink3:#71787F;
+    --bg:#0B0C0D; --line:#212427; --fill:#141618;
+    --accent:#4FC6D8;
+    --c-recycle:#1F63B4; --c-trash:#565E66; --c-center:#12798A;
+    --c-hhw:#A85310; --c-brush:#2D7845; --c-bulk:#5044AE; --c-other:#A4184A;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font:400 calc(var(--f-body) * var(--scale))/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  color:var(--ink);background:var(--bg);letter-spacing:-.011em;overscroll-behavior-y:none;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;letter-spacing:inherit}
+a{color:var(--accent);text-decoration:none}
+svg{display:block;flex:none}
+:focus-visible{outline:2.5px solid var(--accent);outline-offset:3px;border-radius:4px}
+
+#app{max-width:600px;margin:0 auto;min-height:100vh}
+
+/* ───────── nav ───────── */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:50;max-width:600px;margin:0 auto;
+  padding-top:var(--safet);background:var(--bg);
+}
+.nav::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line);
+  opacity:0;transition:opacity .18s;
+}
+.nav.scrolled::after{opacity:1}
+.navbar{height:52px;display:flex;align-items:center;padding:0 12px;position:relative}
+.navttl{
+  position:absolute;left:50%;transform:translateX(-50%);
+  font-size:calc(17px * var(--scale));font-weight:600;letter-spacing:-.02em;
+  opacity:0;transition:opacity .18s;white-space:nowrap;
+}
+.nav.scrolled .navttl{opacity:1}
+.navbtn{
+  display:flex;align-items:center;gap:3px;color:var(--accent);
+  font-size:calc(17px * var(--scale));min-height:44px;min-width:44px;padding:0 8px;
+}
+.navbtn.r{margin-left:auto;justify-content:flex-end;color:var(--ink2)}
+.navbtn:active{opacity:.4}
+.brand{
+  display:flex;align-items:center;min-height:44px;padding:0 8px;
+  font-size:calc(17px * var(--scale));font-weight:600;letter-spacing:-.025em;color:var(--ink);
+}
+
+main{padding:calc(var(--safet) + 52px) 0 calc(110px + var(--safeb))}
+.screen{display:none}
+.screen.on{display:block;animation:in .24s cubic-bezier(.32,.72,0,1)}
+@keyframes in{from{opacity:0}to{opacity:1}}
+
+.large{
+  font-size:calc(var(--f-large) * var(--scale));font-weight:640;letter-spacing:-.032em;
+  padding:14px 22px 10px;line-height:1.08;
+}
+.lead{padding:0 22px 26px;color:var(--ink2);font-size:calc(var(--f-sub) * var(--scale));line-height:1.45}
+
+/* ───────── section label ───────── */
+.sec{
+  padding:30px 22px 10px;color:var(--ink3);
+  font-size:calc(var(--f-foot) * var(--scale));font-weight:600;
+  text-transform:uppercase;letter-spacing:.09em;
+}
+.sec.first{padding-top:6px}
+.sugg{padding:0 22px 4px;color:var(--ink2);font-size:calc(var(--f-sub) * var(--scale))}
+.foot{padding:16px 22px 0;color:var(--ink2);font-size:calc(var(--f-foot) * var(--scale));line-height:1.5}
+
+/* ───────── hairline rows ───────── */
+.list{border-top:1px solid var(--line)}
+.row{
+  display:flex;align-items:center;gap:16px;width:100%;text-align:left;
+  padding:17px 22px;min-height:68px;color:var(--ink);
+  border-bottom:1px solid var(--line);position:relative;
+}
+button.row:active,a.row:active{background:var(--fill)}
+.row .gl{color:var(--ink2)}
+.row .txt{flex:1;min-width:0}
+.row .t{font-size:calc(var(--f-body) * var(--scale));letter-spacing:-.02em;line-height:1.3}
+.row .s{display:block;color:var(--ink2);margin-top:3px;font-size:calc(var(--f-foot) * var(--scale));line-height:1.35}
+.row .val{color:var(--ink2);font-size:calc(var(--f-sub) * var(--scale));flex:none}
+.chev{color:var(--ink3);flex:none}
+
+/* ───────── actions: exactly one primary per screen ─────────
+   Same three components everywhere — Home, Camera, Pickup, Drop-off,
+   Services, Settings and the answer screen. (Ambler: Consistency, Reuse) */
+.actions{padding:4px 22px 8px;display:flex;flex-direction:column;gap:12px}
+.actions.pad{padding-bottom:30px}
+.primary,.secondary,.tertiary{
+  display:flex;align-items:center;width:100%;border-radius:14px;
+  font-size:calc(var(--f-body) * var(--scale));letter-spacing:-.02em;
+}
+.primary{
+  gap:14px;min-height:78px;background:var(--ink);color:var(--bg);
+  padding:16px 20px;text-align:left;
+}
+.primary:active{opacity:.8}
+.primary .t{font-size:calc(20px * var(--scale));font-weight:600;letter-spacing:-.025em;display:block}
+.primary .s{font-size:calc(var(--f-foot) * var(--scale));opacity:.72;display:block;margin-top:3px}
+.secondary{
+  justify-content:center;gap:10px;min-height:62px;color:var(--ink);
+  box-shadow:inset 0 0 0 1.5px var(--line);font-weight:500;
+}
+.secondary:active{background:var(--fill)}
+.tertiary{justify-content:center;min-height:56px;color:var(--accent);font-weight:500}
+.tertiary:active{opacity:.6}
+.tertiary.warn{color:var(--ink2);font-weight:400}
+
+/* ───────── search ───────── */
+.searchbar{padding:0 22px 4px}
+.sfield{
+  display:flex;align-items:center;gap:11px;height:52px;
+  border-bottom:1.5px solid var(--line);color:var(--ink3);
+}
+.sfield:focus-within{border-bottom-color:var(--accent)}
+.sfield input{
+  flex:1;border:0;background:none;outline:none;color:var(--ink);
+  font:400 calc(20px * var(--scale))/1 inherit;letter-spacing:-.025em;min-width:0;
+}
+.sfield input::placeholder{color:var(--ink3)}
+.xbtn{width:44px;height:44px;display:grid;place-items:center;color:var(--ink3);flex:none;margin-right:-10px}
+.filters{display:flex;gap:24px;overflow-x:auto;padding:20px 22px 4px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filt{
+  flex:none;padding:6px 0 9px;color:var(--ink2);white-space:nowrap;
+  font-size:calc(var(--f-sub) * var(--scale));border-bottom:2px solid transparent;
+}
+.filt.on{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+
+/* ───────── the one place colour lives ───────── */
+.verdict{padding:44px 22px 40px;color:#fff;text-align:left}
+.verdict .cap{
+  font-size:calc(var(--f-foot) * var(--scale));font-weight:600;
+  text-transform:uppercase;letter-spacing:.11em;opacity:.75;
+}
+.verdict h2{
+  font-size:calc(40px * var(--scale));font-weight:640;letter-spacing:-.035em;
+  margin:10px 0 14px;line-height:1.03;
+}
+.verdict p{font-size:calc(var(--f-body) * var(--scale));line-height:1.45;opacity:.9;max-width:30ch}
+.verdict .gl{margin-bottom:22px;opacity:.9}
+
+/* ───────── blocks ───────── */
+.block{padding:22px 22px 24px;border-bottom:1px solid var(--line)}
+.block h3{
+  font-size:calc(var(--f-foot) * var(--scale));font-weight:600;color:var(--ink3);
+  text-transform:uppercase;letter-spacing:.09em;margin-bottom:8px;
+}
+.block p{font-size:calc(var(--f-sub) * var(--scale));line-height:1.5;color:var(--ink);white-space:pre-line}
+.block p.dim{color:var(--ink2)}
+
+/* ───────── scan ───────── */
+.shot{width:calc(100% - 44px);margin:0 22px 22px;border-radius:10px;display:block}
+.spin{width:24px;height:24px;margin:0 auto 16px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--ink);animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.center{text-align:center;padding:0 30px}
+
+/* ───────── schedule ───────── */
+.next{padding:8px 22px 34px}
+.next .cap{font-size:calc(var(--f-foot) * var(--scale));font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--ink3)}
+.next .date{font-size:calc(38px * var(--scale));font-weight:640;letter-spacing:-.035em;margin:10px 0 8px;line-height:1.04}
+.next .what{color:var(--ink2);font-size:calc(var(--f-sub) * var(--scale))}
+.next .flag{margin-top:16px;font-size:calc(var(--f-sub) * var(--scale));color:var(--c-hhw)}
+.dgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.dgrid button{
+  height:64px;color:var(--ink2);font-size:calc(var(--f-sub) * var(--scale));font-weight:500;
+  border-right:1px solid var(--line);
+}
+.dgrid button:last-child{border-right:0}
+.dgrid button.on{color:var(--bg);background:var(--ink);font-weight:600}
+
+/* ───────── disclosure ───────── */
+details{border-bottom:1px solid var(--line)}
+summary{display:flex;align-items:center;gap:16px;padding:17px 22px;min-height:68px;list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+summary .t{flex:1;font-size:calc(var(--f-body) * var(--scale));letter-spacing:-.02em}
+summary .dc{color:var(--ink3);transition:transform .18s}
+details[open] summary .dc{transform:rotate(90deg)}
+details .block{border-bottom:0;padding-top:0}
+
+/* ───────── toast (Feedback principle — replaces blocking alerts) ───────── */
+.toast{
+  position:fixed;left:16px;right:16px;bottom:calc(76px + var(--safeb));z-index:60;
+  max-width:568px;margin:0 auto;background:var(--ink);color:var(--bg);
+  border-radius:12px;padding:15px 18px;display:flex;align-items:center;gap:14px;
+  font-size:calc(var(--f-sub) * var(--scale));
+  opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .2s,transform .2s;
+}
+.toast.on{opacity:1;transform:none;pointer-events:auto}
+.toast .msg{flex:1}
+.toast button{color:var(--bg);font-weight:600;text-decoration:underline;padding:8px 0 8px 8px;min-height:44px}
+
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
+
+/* ───────── tab bar ───────── */
+.tabs{
+  position:fixed;left:0;right:0;bottom:0;z-index:50;max-width:600px;margin:0 auto;
+  display:flex;padding-bottom:var(--safeb);background:var(--bg);border-top:1px solid var(--line);
+}
+.tabs button{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  min-height:56px;padding:9px 0 7px;color:var(--ink3);
+  font-size:calc(11px * var(--scale));font-weight:500;letter-spacing:0;
+}
+.tabs button.on{color:var(--ink)}
+.tabs button:active{opacity:.5}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="nav" id="nav">
+    <div class="navbar">
+      <button class="navbtn" id="backBtn" style="display:none" aria-label="Back"></button>
+      <span class="brand" id="brand">Waste Wizard</span>
+      <span class="navttl" id="navTtl"></span>
+      <button class="navbtn r" id="speakBtn" aria-label="Read this page aloud"></button>
+    </div>
+  </div>
+
+  <main>
+    <section class="screen on" id="s-home"></section>
+    <section class="screen" id="s-scan"></section>
+    <section class="screen" id="s-answer"></section>
+    <section class="screen" id="s-search">
+      <h1 class="large">Search</h1>
+      <p class="lead">115 items, nicknames included — try “tin foil”, “wd40” or “keurig”.</p>
+      <div class="searchbar">
+        <label class="sfield">
+          <span id="sIcon"></span>
+          <input type="text" id="q" placeholder="Bottle, box, paint…" autocomplete="off" autocapitalize="off" autocorrect="off" aria-label="Search for an item">
+          <button class="xbtn" id="clearq" style="display:none" aria-label="Clear"></button>
+        </label>
+      </div>
+      <div class="filters" id="filters" role="tablist" aria-label="Filter by destination"></div>
+      <p class="sr-only" id="resultCount" role="status" aria-live="polite"></p>
+      <div id="results"></div>
+    </section>
+    <section class="screen" id="s-schedule"></section>
+    <section class="screen" id="s-places"></section>
+    <section class="screen" id="s-services"></section>
+    <section class="screen" id="s-settings"></section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"><span class="msg" id="toastMsg"></span></div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Main"></nav>
+</div>
+<script>
+/* Round Rock Waste Wizard — rules data.
+   Every rule below is taken from the City of Round Rock's official
+   Garbage & Recycling pages. See SOURCES at the bottom. */
+
+/* color = iOS system palette. ico = key into the ICONS map in app.js. */
+const CATS = {
+  recycle: {
+    id: 'recycle', name: 'Recycling Cart', short: 'Recycling', ico: 'recycle', color: 'var(--c-recycle)',
+    line: 'Put it in your blue recycling cart at the curb.',
+    when: 'Collected every other week, on the same day as your trash.'
+  },
+  trash: {
+    id: 'trash', name: 'Trash Cart', short: 'Trash', ico: 'trash', color: 'var(--c-trash)',
+    line: 'Put it in your regular trash cart at the curb.',
+    when: 'Collected every week.'
+  },
+  center: {
+    id: 'center', name: 'Recycling Center', short: 'Drop-off', ico: 'box', color: 'var(--c-center)',
+    line: 'Take it to the Recycling Center on Deepwood Drive. Free for residents.',
+    when: 'Monday to Saturday, 9:30 AM to 6 PM.'
+  },
+  hhw: {
+    id: 'hhw', name: 'Hazardous Waste', short: 'Hazardous', ico: 'warning', color: 'var(--c-hhw)',
+    line: 'This is hazardous. Take it to Household Hazardous Waste on Deepwood Drive. Never put it in a cart.',
+    when: 'Tuesday to Saturday, 12 PM to 4 PM. Bring your driver\u2019s license and a recent Round Rock water bill.'
+  },
+  brush: {
+    id: 'brush', name: 'Brush Recycling', short: 'Yard waste', ico: 'leaf', color: 'var(--c-brush)',
+    line: 'Take yard waste to the Brush Recycling Center on Deepwood Drive.',
+    when: 'Monday to Saturday, 9 AM to 6 PM. First 2 cubic yards are free for residents.'
+  },
+  bulk: {
+    id: 'bulk', name: 'Bulk Pickup', short: 'Bulk', ico: 'truck', color: 'var(--c-bulk)',
+    line: 'This is a bulk item. Call Republic Services a week ahead to schedule a curbside pickup.',
+    when: 'Residents get one free bulk pickup each year, up to 5 cubic yards.'
+  },
+  other: {
+    id: 'other', name: 'Not a City Service', short: 'Elsewhere', ico: 'store', color: 'var(--c-other)',
+    line: 'The City doesn\u2019t take this one. You\u2019ll need a private recycler or a store take-back program.',
+    when: ''
+  }
+};
+
+/* cat = where it goes. note = plain-language extra instruction.
+   tags = extra words people might search for. */
+const ITEMS = [
+  // ---------- PAPER & CARDBOARD ----------
+  {n:'Cardboard box', cat:'recycle', note:'Flatten it first so it fits in the cart with the lid closed.', tags:'shipping moving amazon carton corrugated'},
+  {n:'Shipping / moving box', cat:'recycle', note:'Flatten it. Take off any plastic tape if you can.', tags:'amazon package delivery'},
+  {n:'Cereal box', cat:'recycle', note:'Take out the plastic liner bag first — the bag goes in the trash.', tags:'boxboard paperboard food box pasta cracker'},
+  {n:'Gift box / shoe box', cat:'recycle', note:'Flatten it.', tags:'present'},
+  {n:'Egg carton (cardboard)', cat:'recycle', note:'Cardboard egg cartons are fine.', tags:'eggs paper'},
+  {n:'Egg carton (foam)', cat:'center', note:'Foam is not allowed in your cart, but the Recycling Center takes Styrofoam.', tags:'styrofoam polystyrene eggs'},
+  {n:'Paper towel / toilet paper tube', cat:'recycle', note:'', tags:'roll cardboard tube'},
+  {n:'Newspaper', cat:'recycle', note:'Keep it loose in the cart — no bags.', tags:'paper news'},
+  {n:'Magazine / catalog', cat:'recycle', note:'', tags:'paper glossy book'},
+  {n:'Junk mail, letters, envelopes', cat:'recycle', note:'Window envelopes are OK.', tags:'paper mail'},
+  {n:'Office paper / file folders', cat:'recycle', note:'Staples and paper clips are OK.', tags:'printer copy paper'},
+  {n:'Shredded paper', cat:'recycle', note:'Must be inside a PAPER bag, stapled closed. Loose shreds jam the machines.', tags:'shredder confetti'},
+  {n:'Paper bag', cat:'recycle', note:'', tags:'grocery sack brown bag'},
+  {n:'Brochure / flyer', cat:'recycle', note:'', tags:'paper ad'},
+  {n:'Phone book', cat:'recycle', note:'', tags:'telephone directory yellow pages'},
+  {n:'Pizza box', cat:'trash', note:'Grease ruins recycling. If the top lid is totally clean, tear it off and recycle just that part.', tags:'greasy food soiled cardboard'},
+  {n:'Paper plate', cat:'trash', note:'Food-soiled paper cannot be recycled.', tags:'party plates disposable'},
+  {n:'Napkin / paper towel / tissue', cat:'trash', note:'Used paper tissue is never recyclable.', tags:'kleenex wipe'},
+  {n:'Milk or juice carton', cat:'trash', note:'Round Rock does NOT take wax-coated cartons.', tags:'wax coated tetra pak orange juice'},
+  {n:'Wrapping paper', cat:'recycle', note:'Only plain paper wrap. If it has foil or glitter, or if it does not stay scrunched in your fist, it goes in the trash.', tags:'christmas gift holiday present'},
+  {n:'Ribbons and bows', cat:'trash', note:'Reuse them if you can — otherwise trash.', tags:'christmas gift holiday'},
+  {n:'Laminated paper', cat:'trash', note:'', tags:'plastic coated'},
+
+  // ---------- PLASTIC ----------
+  {n:'Water or soda bottle', cat:'recycle', note:'Empty it, give it a rinse, crush it, and put the cap back on.', tags:'plastic drink bottle pet #1'},
+  {n:'Milk jug', cat:'recycle', note:'Rinse it out. Cap can stay on.', tags:'plastic hdpe gallon'},
+  {n:'Yogurt / butter / cream cheese tub', cat:'recycle', note:'Rinse it and peel off the foil lid — the foil goes in the trash.', tags:'dairy container margarine sour cream'},
+  {n:'Detergent or cleaning bottle', cat:'recycle', note:'Empty and rinse.', tags:'laundry soap spray plastic'},
+  {n:'Cooking oil bottle', cat:'recycle', note:'', tags:'vegetable olive oil plastic'},
+  {n:'Plastic lid', cat:'recycle', note:'Loose lids are accepted.', tags:'cap top'},
+  {n:'Plastic grocery bag', cat:'other', note:'Never put bags in your cart — they tangle the sorting machines. Take them back to the bin at a grocery store.', tags:'shopping sack film wrap plastic bag'},
+  {n:'Plastic wrap / bubble wrap', cat:'trash', note:'Plastic film is not accepted in the cart or at the Recycling Center.', tags:'cling saran film packaging'},
+  {n:'Plastic cutlery, straws, cups', cat:'trash', note:'Too small and too light to sort.', tags:'fork spoon knife party solo'},
+  {n:'Plastic toy', cat:'trash', note:'If it still works, donate it instead.', tags:'kids children'},
+  {n:'Styrofoam cup or takeout box', cat:'center', note:'Not in your cart. The Recycling Center takes clean foam — "if you can flake it, we can take it."', tags:'polystyrene foam takeout to-go'},
+  {n:'Styrofoam packaging (TV, furniture)', cat:'center', note:'Big block foam from packaging is accepted at the Recycling Center. Not in the cart.', tags:'polystyrene block foam box'},
+  {n:'Packing peanuts', cat:'trash', note:'Not accepted anywhere in the City program. Ship-store may reuse them.', tags:'foam loose fill styrofoam'},
+  {n:'Foam sheeting / egg-crate foam', cat:'trash', note:'Not accepted, even at the Recycling Center.', tags:'acoustic insulation board mattress topper'},
+
+  // ---------- GLASS ----------
+  {n:'Glass bottle (wine, beer, liquor)', cat:'recycle', note:'Rinse it. Do not break it.', tags:'alcohol drink jar'},
+  {n:'Pasta sauce jar', cat:'recycle', note:'Rinse it and take the metal lid off. The lid can go in loose too.', tags:'glass jar spaghetti'},
+  {n:'Mason jar', cat:'recycle', note:'Remove the lid.', tags:'canning glass jar'},
+  {n:'Soda or juice glass bottle', cat:'recycle', note:'', tags:'glass drink'},
+  {n:'Broken glass', cat:'trash', note:'Wrap it in newspaper or cardboard first so nobody gets cut.', tags:'shattered shards'},
+  {n:'Window glass or mirror', cat:'trash', note:'Different type of glass — not recyclable here.', tags:'pane windshield mirror'},
+  {n:'Drinking glass, Pyrex, ceramic dish', cat:'trash', note:'These melt differently than bottles. Donate if unbroken.', tags:'dinnerware plate bowl mug china cup'},
+
+  // ---------- METAL ----------
+  {n:'Aluminum can', cat:'recycle', note:'Rinse and crush. Caps are OK too.', tags:'soda beer pop drink metal'},
+  {n:'Soup or vegetable can', cat:'recycle', note:'Rinse it out. Steel and tin cans are fine.', tags:'tin steel food can'},
+  {n:'Pet food can', cat:'recycle', note:'Rinse it.', tags:'cat dog tin'},
+  {n:'Aluminum foil', cat:'recycle', note:'Only if clean. Ball it up. Greasy foil goes in the trash.', tags:'tin foil wrap'},
+  {n:'Foil baking tin', cat:'recycle', note:'Rinse off the food first.', tags:'pie pan tray aluminum'},
+  {n:'Aerosol can (hairspray, spray paint)', cat:'hhw', note:'Even empty ones are pressurized. Take them to Hazardous Waste.', tags:'spray pressurized wd40 paint'},
+  {n:'Paint can', cat:'hhw', note:'Not accepted in carts or at the Recycling Center. See "Paint" for the latex trick.', tags:'metal can painting'},
+  {n:'Scrap metal', cat:'center', note:'The Recycling Center takes scrap metal.', tags:'steel iron pipe rebar metal'},
+  {n:'Nails, screws, loose hardware', cat:'trash', note:'Put them in a sealed can or jar so nobody gets hurt.', tags:'bolt washer sharp'},
+  {n:'Propane tank', cat:'center', note:'Propane and helium tanks are accepted at the Recycling Center. Never in a cart — they explode in the truck.', tags:'grill bbq gas cylinder camping helium'},
+
+  // ---------- BATTERIES & BULBS ----------
+  {n:'Rechargeable battery', cat:'center', note:'Recycling Center takes rechargeables. Tape over the ends first.', tags:'lithium nicad power tool laptop phone battery'},
+  {n:'Alkaline battery (AA, AAA, 9V)', cat:'hhw', note:'Batteries are not allowed in your trash cart, and the Recycling Center only takes rechargeables. Bring them to the Hazardous Waste drop-off. Tape over the ends first.', tags:'aa aaa c d 9 volt duracell energizer'},
+  {n:'Car battery', cat:'center', note:'Recycling Center takes car batteries, residential only.', tags:'automotive lead acid vehicle'},
+  {n:'Fluorescent light bulb / tube', cat:'center', note:'Contains mercury. Recycling Center takes fluorescent bulbs.', tags:'cfl tube light mercury bulb'},
+  {n:'Regular light bulb / LED', cat:'trash', note:'Only fluorescent bulbs are recycled here. Wrap it so it does not break.', tags:'incandescent led lamp bulb'},
+
+  // ---------- HAZARDOUS ----------
+  {n:'Paint (latex / water-based)', cat:'trash', note:'Easy fix: open the can and let it dry out completely. Then set the dry can next to your trash cart on pickup day.', tags:'wall interior acrylic dry'},
+  {n:'Paint (oil-based) & thinner', cat:'hhw', note:'Take it to Hazardous Waste. Keep it in the original container.', tags:'solvent turpentine mineral spirits stain varnish'},
+  {n:'Motor oil', cat:'center', note:'Recycling Center takes up to 5 gallons in an approved container. Residential only.', tags:'engine oil automotive car used oil'},
+  {n:'Oil filter', cat:'center', note:'Accepted at the Recycling Center.', tags:'automotive car engine'},
+  {n:'Gasoline', cat:'center', note:'Up to 5 gallons, in an approved gas container.', tags:'fuel gas petrol'},
+  {n:'Antifreeze', cat:'center', note:'Accepted at the Recycling Center.', tags:'coolant radiator automotive'},
+  {n:'Brake, transmission, power steering fluid', cat:'center', note:'Accepted at the Recycling Center.', tags:'automotive car fluid'},
+  {n:'Cleaning chemicals / bleach', cat:'hhw', note:'Keep in the original bottle, sealed. Do not mix products.', tags:'ammonia drain oven cleaner household chemical'},
+  {n:'Pesticide, herbicide, fertilizer', cat:'hhw', note:'Lawn and garden chemicals go to Hazardous Waste.', tags:'weed killer bug spray roundup lawn garden'},
+  {n:'Pool chemicals', cat:'hhw', note:'', tags:'chlorine shock swimming'},
+  {n:'Adhesive / glue / caulk', cat:'hhw', note:'', tags:'epoxy sealant construction'},
+  {n:'Smoke detector', cat:'hhw', note:'Accepted at Hazardous Waste drop-off.', tags:'alarm fire carbon monoxide'},
+  {n:'Mercury thermometer', cat:'hhw', note:'', tags:'mercury thermostat'},
+  {n:'Ammunition / fireworks / flares', cat:'other', note:'NOT accepted by the City. Call the Round Rock Police non-emergency line for safe disposal.', tags:'bullets explosives gun shells'},
+  {n:'Medical sharps / needles', cat:'other', note:'NOT accepted. Use a sharps container and ask your pharmacy or doctor’s office.', tags:'syringe insulin diabetic lancet'},
+  {n:'Old medicine / pills', cat:'other', note:'Do not flush or trash loose pills. Use a pharmacy or police station take-back box.', tags:'prescription drugs pharmacy medication'},
+
+  // ---------- BULK & FURNITURE ----------
+  {n:'Couch / sofa / chair', cat:'bulk', note:'Call Republic Services a week ahead. Or donate it if it is still good.', tags:'furniture loveseat recliner living room'},
+  {n:'Mattress or box spring', cat:'bulk', note:'Accepted on bulk pickup.', tags:'bed sleeping furniture'},
+  {n:'Table, dresser, bookshelf', cat:'bulk', note:'', tags:'furniture desk cabinet wood'},
+  {n:'Washer, dryer, stove, dishwasher', cat:'bulk', note:'Non-Freon appliances are accepted on bulk pickup. The Recycling Center also takes them free.', tags:'appliance white goods laundry oven range'},
+  {n:'Water heater', cat:'center', note:'The Recycling Center accepts hot water heaters.', tags:'appliance boiler tank'},
+  {n:'Microwave', cat:'center', note:'Accepted at the Recycling Center.', tags:'appliance kitchen oven'},
+  {n:'Refrigerator, freezer, A/C unit', cat:'other', note:'These contain Freon and are NOT accepted by the City. You need a licensed appliance recycler to remove the Freon.', tags:'fridge freon air conditioner ac cooling appliance'},
+  {n:'Water softener', cat:'other', note:'Not accepted at the Recycling Center.', tags:'appliance tank'},
+  {n:'Lumber (4 ft or shorter)', cat:'bulk', note:'Remove all nails and screws first. Cut it to 4 feet or shorter.', tags:'wood board plank 2x4 fence'},
+  {n:'Carpet / rug', cat:'bulk', note:'Roll and tie it, keep pieces under 4 feet. Carpet is not on the City’s official bulk list — call Republic Services first to make sure they will take it.', tags:'flooring padding'},
+
+  // ---------- YARD ----------
+  {n:'Tree limbs / branches', cat:'brush', note:'Take them to the Brush Recycling Center, or request a curbside brush pickup ($25 for the first 5 minutes).', tags:'wood trimmings tree cut yard limb'},
+  {n:'Grass clippings / leaves', cat:'brush', note:'Bagged leaves and grass are accepted at the Brush Recycling Center. Small amounts can also go in your trash cart.', tags:'lawn mowing yard raking'},
+  {n:'Shrub trimmings', cat:'brush', note:'', tags:'hedge bush yard'},
+  {n:'Christmas tree', cat:'brush', note:'Take off all lights, tinsel, and the stand first.', tags:'holiday pine fir xmas'},
+  {n:'Tree stump', cat:'other', note:'Stumps are NOT accepted at the Brush Recycling Center. You need a private hauler.', tags:'root trunk'},
+  {n:'Palm fronds / cactus', cat:'other', note:'NOT accepted at the Brush Recycling Center.', tags:'palm tree yucca agave prickly pear'},
+  {n:'Treated wood / fence pickets', cat:'other', note:'Treated wood is NOT accepted at Brush Recycling. Try bulk pickup only if under 4 ft with nails removed.', tags:'pressure treated railroad tie fence lumber'},
+  {n:'Garden hose', cat:'trash', note:'Hoses tangle the sorting machines — never in the cart.', tags:'water hose sprinkler'},
+  {n:'Irrigation / sprinkler controller', cat:'trash', note:'Specifically not accepted in curbside recycling.', tags:'timer sprinkler yard'},
+  {n:'Dirt, rock, concrete, bricks', cat:'other', note:'Construction debris is not collected. Use a private dump or dumpster service.', tags:'soil gravel demolition rubble masonry'},
+
+  // ---------- ELECTRONICS ----------
+  {n:'Television', cat:'other', note:'TVs are NOT accepted by the City — not curbside, not bulk, not the Recycling Center. Use a private e-waste recycler or a manufacturer take-back program.', tags:'tv screen monitor crt flat panel electronics'},
+  {n:'Computer, laptop, tablet', cat:'other', note:'Electronics are not accepted by the City. Many Texas manufacturers offer free take-back — search "TCEQ electronics recycling."', tags:'pc desktop mac ipad electronics e-waste'},
+  {n:'Cell phone', cat:'other', note:'Not a City service. Most phone carriers take old phones back.', tags:'mobile smartphone iphone android electronics'},
+  {n:'Printer', cat:'other', note:'Electronics are not accepted.', tags:'scanner electronics e-waste'},
+  {n:'Printer ink / toner cartridge', cat:'other', note:'Not accepted at the Recycling Center. Office supply stores usually take them.', tags:'ink toner cartridge printer'},
+  {n:'Small appliance (toaster, blender)', cat:'center', note:'Appliances are not allowed in your trash cart. Take it to the Recycling Center — they take microwaves and scrap metal.', tags:'kitchen coffee maker mixer toaster electronics'},
+
+  // ---------- OTHER COMMON ----------
+  {n:'Clothing / shoes / textiles', cat:'other', note:'Never in the recycling cart. Donate wearable items; take rags and worn-out clothes to a textile drop box.', tags:'clothes fabric donate goodwill shirt shoes'},
+  {n:'Tires', cat:'other', note:'NOT accepted anywhere in the City program. Most tire shops will take them for a small fee.', tags:'wheel rubber car tire'},
+  {n:'Diapers', cat:'trash', note:'', tags:'baby nappy'},
+  {n:'Pet waste / cat litter', cat:'trash', note:'Bag it before it goes in the cart.', tags:'dog poop litter box animal'},
+  {n:'Food scraps / leftovers', cat:'trash', note:'Round Rock does not have curbside compost. Backyard composting is a great option.', tags:'compost organic kitchen waste garbage'},
+  {n:'Cooking grease / used oil', cat:'trash', note:'Let it cool and harden in a can, then trash it. Never pour it down the drain — it clogs city pipes.', tags:'fat bacon fryer kitchen'},
+  {n:'Coffee cup (paper, with lining)', cat:'trash', note:'The plastic lining makes it non-recyclable. The plastic lid can be recycled.', tags:'starbucks to-go drink'},
+  {n:'K-Cup / coffee pod', cat:'trash', note:'Too small to sort.', tags:'keurig nespresso capsule'},
+  {n:'Chip bag / candy wrapper', cat:'trash', note:'Mixed materials cannot be separated.', tags:'snack foil mylar plastic'},
+  {n:'String lights (Christmas)', cat:'center', note:'The Recycling Center takes broken or unwanted string lights.', tags:'holiday xmas twinkle lights wire'},
+  {n:'Faucet water filter', cat:'center', note:'Accepted at the Recycling Center.', tags:'brita pur water filter'},
+  {n:'Books', cat:'other', note:'Hardcover books are not recyclable in the cart. Donate them, or tear off the cover and recycle the pages.', tags:'novel textbook hardcover paperback donate'},
+  {n:'Documents to shred', cat:'center', note:'Shred small amounts at home (paper bag, stapled shut) or wait for the City’s "Shred for a Paws Cause" event.', tags:'confidential shredding papers personal'},
+  {n:'Medical waste', cat:'other', note:'Not accepted by the City.', tags:'biohazard hospital'},
+  {n:'Vehicle / car', cat:'other', note:'Not accepted. Use a salvage yard.', tags:'auto junk car scrap'}
+];
+
+const HOLIDAYS_NOTE = 'Thanksgiving, Christmas Day, and New Year’s Day push collection back by one day for the rest of that week. All other holidays run on the normal schedule.';
+
+const PLACES = [
+  {
+    name: 'Recycling Center',
+    addr: '310 Deepwood Drive, Round Rock, TX 78681',
+    sub: 'Just west of Round Rock High School',
+    hours: 'Monday – Saturday, 9:30 a.m. – 6 p.m. (closed City holidays)',
+    phone: '512-218-5554',
+    takes: 'Metal & scrap metal, appliances (no Freon), motor oil, gasoline, antifreeze, car batteries, all curbside recyclables, Styrofoam, rechargeable batteries, fluorescent bulbs, propane & helium tanks, water filters, string lights.',
+    avoid: 'No TVs, electronics, tires, Freon appliances, pizza boxes, plastic bags, alkaline batteries, ink cartridges.'
+  },
+  {
+    name: 'Household Hazardous Waste',
+    addr: '310 Deepwood Drive, Round Rock, TX 78681',
+    sub: 'Same site as the Recycling Center',
+    hours: 'Tuesday – Saturday, 12 p.m. – 4 p.m. No appointment needed.',
+    phone: '512-218-5554',
+    takes: 'Paint, thinners, solvents, stains, adhesives, aerosol cans, cleaning products, pesticides, fertilizers, pool chemicals, poisons, mercury, smoke detectors, automotive waste. Up to 25 gallons per month.',
+    avoid: 'No ammunition, explosives, fireworks, gas cylinders, medical waste, sharps, tires, electronics, or containers over 5 gallons.'
+  },
+  {
+    name: 'Brush Recycling Center',
+    addr: '310 Deepwood Drive, Round Rock, TX 78681',
+    sub: 'Run by Parks & Recreation',
+    hours: 'Monday – Saturday, 9 a.m. – 6 p.m.',
+    phone: '512-218-5540',
+    takes: 'Tree trimmings, branches, shrub parts, bagged leaves and grass. Free up to 2 cubic yards; $20 for 2–4 yards; $40 over 4 yards. Free mulch to take home, up to 2 cubic yards.',
+    avoid: 'No palm trees, cacti, stumps, treated wood, demolition debris, or hazardous waste.'
+  }
+];
+
+const CONTACTS = [
+  {label:'Missed pickup / cart problems', who:'Republic Services', phone:'512-255-4980', note:'Call if your cart was not emptied by 6:30 p.m. on your pickup day.'},
+  {label:'Schedule bulk pickup', who:'Republic Services', phone:'512-255-4980', note:'Call one week before your regular collection day.'},
+  {label:'Recycling Center & Hazardous Waste', who:'City of Round Rock', phone:'512-218-5554', note:'Option 4. Email recycling@roundrocktexas.gov'},
+  {label:'Brush & yard waste', who:'Parks & Recreation Forestry', phone:'512-218-5540', note:'Curbside brush pickup: request by 4 p.m. Tuesday for Wednesday service.'},
+  {label:'Utilities & Environmental Services', who:'City of Round Rock', phone:'512-218-5555', note:'3400 Sunrise Road, Round Rock, TX 78665'}
+];
+
+const SERVICES = [
+  {
+    t:'Weekly trash pickup',
+    ico:'trash',
+    body:'One cart, plus up to 7 extra bags or small items at no charge. Each item must be under 40 lbs and smaller than 4 ft x 4 ft x 4 ft. Cart at the curb before 7 a.m., wheels against the curb, lid closed, carts 3 feet apart.',
+    no:'Not accepted in weekly trash: appliances, batteries, compressed gases, concrete, construction debris, electronics, hazardous chemicals, propane tanks, tires, wood/lumber.'
+  },
+  {
+    t:'Every-other-week recycling',
+    ico:'recycle',
+    body:'Same day as your trash, every other week. Everything must be loose in the cart — no plastic bags. Rinse containers, flatten boxes, crush cans, and keep the lid closed.',
+    no:''
+  },
+  {
+    t:'Free annual bulk pickup',
+    ico:'truck',
+    body:'One free pickup per year for in-city residents, up to 5 cubic yards. Call Republic Services at 512-255-4980 one week before your regular collection day. Set items neatly at the curb by 7 a.m.\n\nYES: non-Freon appliances, furniture, scrap metal, lumber under 4 ft with nails removed, mattresses.',
+    no:'NO: Freon appliances (fridges, freezers, A/C), automotive products, brush and tree limbs, chemicals, demolition debris, paint, tires, TVs.'
+  },
+  {
+    t:'Curbside brush pickup',
+    ico:'leaf',
+    body:'Request by 4 p.m. Tuesday for Wednesday service. $25 for the first five minutes, then $1 per extra minute, billed on your water bill. Pile brush at the curb with limbs no longer than 10 feet, and keep the pile clear of cars, mailboxes and low wires.',
+    no:''
+  },
+  {
+    t:'Household hazardous waste drop-off',
+    ico:'warning',
+    body:'310 Deepwood Drive, Tuesday–Saturday 12–4 p.m. No appointment. Free for Round Rock residents — bring your driver’s license and a recent City water bill. Fern Bluff or Brushy Creek MUD residents need a voucher. Non-residents pay $60 per vehicle.\n\nKeep products in original containers, seal them, label anything unmarked, do not mix products, and put containers in a box so they do not spill in your car.',
+    no:''
+  },
+  {
+    t:'Free Re-USE Building',
+    ico:'gift',
+    body:'At the Recycling Center, take home free leftover paint, pesticides, fertilizers, cleaning products, pool chemicals, and automotive fluids that other residents dropped off. Great way to save money on a project.',
+    no:''
+  },
+  {
+    t:'Shred for a Paws Cause',
+    ico:'doc',
+    body:'A City shredding event for personal documents, held at the Recycling Center. Check the City website for the next date.',
+    no:''
+  },
+  {
+    t:'Holiday schedule',
+    ico:'calendar',
+    body: HOLIDAYS_NOTE,
+    no:''
+  }
+];
+
+const SOURCES = [
+  ['Garbage and Recycling', 'https://www.roundrocktexas.gov/city-departments/utilities-and-environmental-services/garbage-and-recycling/'],
+  ['Recycling (accepted / not accepted)', 'https://www.roundrocktexas.gov/city-departments/utilities-and-environmental-services/garbage-and-recycling/recycling/'],
+  ['Recycling Center', 'https://www.roundrocktexas.gov/city-departments/utilities-and-environmental-services/garbage-and-recycling/recyclingcenter/'],
+  ['Household Hazardous Waste', 'https://www.roundrocktexas.gov/city-departments/utilities-and-environmental-services/garbage-and-recycling/household-hazardous-waste-disposal/'],
+  ['Bulk Trash Pickup', 'https://www.roundrocktexas.gov/city-departments/utilities-and-environmental-services/garbage-and-recycling/bulk-trash-pickup/'],
+  ['Brush Recycling', 'https://www.roundrocktexas.gov/city-departments/parks-and-recreation/forestry/brush-recycling/'],
+  ['Find my pickup day', 'https://citysiteapps.roundrocktexas.gov/#/garbage-recycle']
+];
+
+</script>
+<script>
+/* ============ Round Rock Waste Wizard — app logic ============ */
+
+/* ---------- icon set (SF Symbols-style line glyphs, 24×24) ---------- */
+const ICONS = {
+  back:    ['M15 4.4 7.4 12 15 19.6'],
+  chev:    ['M9.2 5.2 16 12l-6.8 6.8'],
+  home:    ['M3 10.2 12 3l9 7.2', 'M5.6 8.9v10.5a1 1 0 0 0 1 1H10v-6.2h4v6.2h3.4a1 1 0 0 0 1-1V8.9'],
+  camera:  ['M3.6 7.8h3.1l1.6-2.4h7.4l1.6 2.4h3.1a1 1 0 0 1 1 1v9.4a1 1 0 0 1-1 1H3.6a1 1 0 0 1-1-1V8.8a1 1 0 0 1 1-1z',
+            'M15.4 13.4a3.4 3.4 0 1 1-6.8 0 3.4 3.4 0 0 1 6.8 0z'],
+  search:  ['M18 10.5a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0z', 'M15.9 15.9 21 21'],
+  calendar:['M4 6.5h16a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7.5a1 1 0 0 1 1-1z',
+            'M3 10.6h18', 'M8 4v4', 'M16 4v4'],
+  sliders: ['M3 7h4', 'M11 7h10', 'M3 12h10', 'M17 12h4', 'M3 17h5', 'M12 17h9',
+            'M11 7a2 2 0 1 1-4 0 2 2 0 0 1 4 0z', 'M17 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',
+            'M12 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z'],
+  // three arrows in 120° rotational symmetry — the standard recycling mark
+  recycle: ['M9.98 6.46 4.64 15.71',   'M7.68 13.95 4.64 15.71 4.64 12.2',
+            'M18.13 13.59 12.81 4.38', 'M12.81 7.88 12.81 4.38 15.86 6.14',
+            'M7.91 17.11 18.55 17.13', 'M15.51 15.37 18.55 17.13 15.51 18.88'],
+  trash:   ['M4.5 6.8h15', 'M9.2 6.8V4.6a1 1 0 0 1 1-1h3.6a1 1 0 0 1 1 1v2.2',
+            'M6.6 6.8l.85 12.6a1 1 0 0 0 1 .93h7.1a1 1 0 0 0 1-.93L17.4 6.8',
+            'M10.4 10.6v5.8', 'M13.6 10.6v5.8'],
+  box:     ['M3.2 7.6 12 3.4l8.8 4.2v8.8L12 20.6 3.2 16.4z', 'M3.2 7.6 12 11.8l8.8-4.2', 'M12 11.8v8.8'],
+  warning: ['M13.13 4.76a1.3 1.3 0 0 0-2.26 0l-7.4 12.9a1.3 1.3 0 0 0 1.13 1.94h14.8a1.3 1.3 0 0 0 1.13-1.94z',
+            'M12 9.4v4.3', 'M12 16.7h.01'],
+  leaf:    ['M20.2 4.2c.6 7.6-3.4 13.4-11 13.4-2 0-3.4-.5-3.4-.5C4.8 11.5 8.2 4.2 20.2 4.2z',
+            'M4.4 20.2c1.6-4.4 4.6-7.7 8.6-9.7'],
+  truck:   ['M3.2 6.6h9.6a1 1 0 0 1 1 1v8.8H3.2a1 1 0 0 1-1-1V7.6a1 1 0 0 1 1-1z',
+            'M13.8 10.4h3.9l3.1 3.1v2.9h-7z',
+            'M8.7 17.9a1.9 1.9 0 1 1-3.8 0 1.9 1.9 0 0 1 3.8 0z',
+            'M19.4 17.9a1.9 1.9 0 1 1-3.8 0 1.9 1.9 0 0 1 3.8 0z'],
+  store:   ['M4 9.6h16V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z', 'M3.2 9.6 5 4.6h14l1.8 5', 'M9.6 20v-5.3h4.8V20'],
+  gift:    ['M3.6 11.6h16.8V19a1 1 0 0 1-1 1H4.6a1 1 0 0 1-1-1z', 'M2.8 8h18.4v3.6H2.8z', 'M12 8v12',
+            'M12 8S10.6 4.1 8.4 4.1a1.95 1.95 0 0 0 0 3.9z', 'M12 8s1.4-3.9 3.6-3.9a1.95 1.95 0 0 1 0 3.9z'],
+  doc:     ['M6 3.4h7.4L19 9v11.6a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.4a1 1 0 0 1 1-1z',
+            'M13.4 3.4V9H19', 'M8.4 13.4h7.2', 'M8.4 17h4.8'],
+  speaker: ['M11.4 4.6 6.8 8.8H3.6v6.4h3.2l4.6 4.2z', 'M15.4 9.6a3.6 3.6 0 0 1 0 4.8',
+            'M18.2 6.8a7.4 7.4 0 0 1 0 10.4'],
+  stop:    ['M8 7.6h8a.4.4 0 0 1 .4.4v8a.4.4 0 0 1-.4.4H8a.4.4 0 0 1-.4-.4V8a.4.4 0 0 1 .4-.4z'],
+  pin:     ['M12 21.2s7.2-6.6 7.2-11.4a7.2 7.2 0 1 0-14.4 0c0 4.8 7.2 11.4 7.2 11.4z',
+            'M14.6 9.6a2.6 2.6 0 1 1-5.2 0 2.6 2.6 0 0 1 5.2 0z'],
+  phone:   ['M6.4 3.6h2.9l1.6 4-2 1.4a11.4 11.4 0 0 0 6.1 6.1l1.4-2 4 1.6v2.9a1.7 1.7 0 0 1-1.9 1.7C11.3 19 5 12.7 4.7 5.5a1.7 1.7 0 0 1 1.7-1.9z'],
+  clock:   ['M20.4 12a8.4 8.4 0 1 1-16.8 0 8.4 8.4 0 0 1 16.8 0z', 'M12 7.2V12l3.2 2'],
+  check:   ['M4.8 12.6 9.6 17.4 19.2 6.6'],
+  photo:   ['M4 5.4h16a1 1 0 0 1 1 1v11.2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6.4a1 1 0 0 1 1-1z',
+            'M3.2 16.4 8 11.8l3.4 3.2 3.6-4 5.8 5.6', 'M10 9.2a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z'],
+  keyboard:['M3 6.4h18a1 1 0 0 1 1 1v9.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.4a1 1 0 0 1 1-1z',
+            'M6 10h.01', 'M10 10h.01', 'M14 10h.01', 'M18 10h.01', 'M8.4 14h7.2'],
+  textsize:['M3.4 18 8.4 6l5 12', 'M5.4 14.2h6', 'M20.6 18v-5.2a2.5 2.5 0 0 0-5 0V18'],
+  map:     ['M9 4.2 3.6 6.4v13.4L9 17.6l6 2.2 5.4-2.2V4.2L15 6.4z', 'M9 4.2v13.4', 'M15 6.4v13.4'],
+  bell:    ['M12 3.4A5.6 5.6 0 0 0 6.4 9c0 5.2-2 6.6-2 6.6h15.2s-2-1.4-2-6.6A5.6 5.6 0 0 0 12 3.4z',
+            'M13.8 19.2a2.1 2.1 0 0 1-3.6 0'],
+  reset:   ['M3.6 12a8.4 8.4 0 1 0 2.6-6.1', 'M3.4 4.2v5h5'],
+  key:     ['M20.4 4.2 12.6 12', 'M17.6 7l2.2 2.2', 'M14.8 9.8l2.2 2.2',
+            'M12.6 12a4.4 4.4 0 1 1-6.2 6.2A4.4 4.4 0 0 1 12.6 12z'],
+  info:    ['M20.4 12a8.4 8.4 0 1 1-16.8 0 8.4 8.4 0 0 1 16.8 0z', 'M12 11.4v5', 'M12 8.2h.01'],
+  building:['M5 20V5.4a1 1 0 0 1 1-1h7.6a1 1 0 0 1 1 1V20', 'M14.6 10h4.4a1 1 0 0 1 1 1v9',
+            'M3 20h18', 'M8.2 8.4h3.2', 'M8.2 12h3.2', 'M8.2 15.6h3.2'],
+  share:   ['M12 15.6V3.6', 'M8.2 7.2 12 3.4l3.8 3.8', 'M6 11.4H4.6a1 1 0 0 0-1 1v7.6a1 1 0 0 0 1 1h14.8a1 1 0 0 0 1-1v-7.6a1 1 0 0 0-1-1H18']
+};
+
+/** Build an inline SVG. `fill` renders a filled glyph (used for the clear button). */
+function svg(name, size = 24, w = 1.9, cls = '') {
+  const d = ICONS[name] || [];
+  return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true">${d.map(p => `<path d="${p}"/>`).join('')}</svg>`;
+}
+/** Monochrome glyph. Colour is reserved for the answer screen. */
+const gl = (name, size = 23, w = 1.7) => `<span class="gl">${svg(name, size, w)}</span>`;
+const chev = () => `<span class="chev">${svg('chev', 15, 2.2)}</span>`;
+
+/* ---------- storage (degrades gracefully where localStorage is blocked) ---------- */
+const mem = {};
+const store = {
+  get(k, d) {
+    try { const v = localStorage.getItem('rrw_' + k); return v === null ? (k in mem ? mem[k] : d) : JSON.parse(v); }
+    catch (e) { return k in mem ? mem[k] : d; }
+  },
+  set(k, v) { mem[k] = v; try { localStorage.setItem('rrw_' + k, JSON.stringify(v)); } catch (e) {} }
+};
+
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ================= routing ================= */
+/* One name per concept, reused in the tab bar, the nav title, the back button
+   and every link that points there. (Ambler: Consistency, Reuse) */
+const TITLES = {
+  home: 'Home', scan: 'Camera', answer: 'Result', search: 'Search',
+  schedule: 'Pickup', places: 'Drop-off', services: 'Services', settings: 'Settings'
+};
+const TABS = [
+  ['home', 'Home', 'home'], ['scan', 'Camera', 'camera'], ['search', 'Search', 'search'],
+  ['schedule', 'Pickup', 'calendar'], ['settings', 'Settings', 'sliders']
+];
+let current = 'home', stack = [];
+
+function go(name, push = true) {
+  if (push && name !== current) stack.push(current);
+  current = name;
+  $$('.screen').forEach(s => s.classList.toggle('on', s.id === 's-' + name));
+  $$('#tabs button').forEach(b => {
+    const on = b.dataset.go === name;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-current', on ? 'page' : 'false');
+  });
+  // Home keeps the brand lockup on the left, so the centre title would collide
+  $('#navTtl').textContent = name === 'home' ? '' : (TITLES[name] || 'Waste Wizard');
+  $('#backBtn').style.display = name === 'home' ? 'none' : 'flex';
+  $('#brand').style.display = name === 'home' ? 'flex' : 'none';
+  // the back button names where it actually goes (Feedback; Navigation between screens)
+  const prev = stack[stack.length - 1];
+  $('#backLbl').textContent = prev ? (TITLES[prev] || 'Back') : 'Home';
+  window.scrollTo(0, 0);
+  $('#nav').classList.remove('scrolled');
+  stopSpeech(); hideToast();
+  ({ home: renderHome, schedule: renderSchedule, places: renderPlaces,
+     services: renderServices, settings: renderSettings, scan: renderScan }[name] || (() => {}))();
+  if (name === 'search') setTimeout(() => { if (!$('#q').value) $('#q').focus(); }, 150);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-go]');
+  if (b) go(b.dataset.go);
+});
+addEventListener('scroll', () => $('#nav').classList.toggle('scrolled', scrollY > 26), { passive: true });
+
+/* ---------- chrome ---------- */
+$('#backBtn').innerHTML = svg('back', 18, 2.2) + '<span id="backLbl">Home</span>';
+$('#backBtn').onclick = () => go(stack.pop() || 'home', false);
+$('#sIcon').innerHTML = `<span class="gl">${svg('search', 21, 1.8)}</span>`;
+$('#clearq').innerHTML = `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+$('#tabs').innerHTML = TABS.map(([id, label, ico]) =>
+  `<button data-go="${id}"${id === 'home' ? ' class="on" aria-current="page"' : ' aria-current="false"'}>${svg(ico, 23, 1.7)}<span>${label}</span></button>`).join('');
+
+/* ---------- toast: non-blocking confirmation (Feedback principle) ---------- */
+let toastTimer;
+function toast(msg, undo) {
+  const t = $('#toast');
+  $('#toastMsg').textContent = msg;
+  const old = t.querySelector('button');
+  if (old) old.remove();
+  if (undo) {
+    const b = document.createElement('button');
+    b.textContent = 'Undo';
+    b.onclick = () => { undo(); hideToast(); };
+    t.appendChild(b);
+  }
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, undo ? 7000 : 3200);
+}
+function hideToast() { $('#toast').classList.remove('on'); clearTimeout(toastTimer); }
+
+/* ---------- read aloud ---------- */
+let speaking = false;
+function stopSpeech() {
+  try { speechSynthesis.cancel(); } catch (e) {}
+  speaking = false; $('#speakBtn').innerHTML = svg('speaker', 21, 1.7);
+}
+$('#speakBtn').innerHTML = svg('speaker', 21, 1.7);
+$('#speakBtn').onclick = () => {
+  if (speaking) return stopSpeech();
+  const txt = ($('#s-' + current).innerText || '').replace(/\s+/g, ' ').trim();
+  if (!txt) return;
+  try {
+    const u = new SpeechSynthesisUtterance(txt.slice(0, 1400));
+    u.rate = .95; u.onend = stopSpeech;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+    speaking = true; $('#speakBtn').innerHTML = svg('stop', 21, 1.7);
+  } catch (e) { toast('Read-aloud isn’t available on this device.'); }
+};
+
+/* ================= home ================= */
+function renderHome() {
+  const g = store.get('gday', null);
+  const nx = g === null ? null : upcoming(1)[0];
+  const next = !nx ? 'Not set' : (f => (f === 'Today' || f === 'Tomorrow') ? f
+    : DAYNAMES[nx.date.getDay()].slice(0, 3) + ' ' + nx.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  )(friendlyDate(nx.date));
+
+  $('#s-home').innerHTML = `
+    <h1 class="large">What are you<br>throwing out?</h1>
+    <p class="lead">We’ll tell you exactly where it goes in Round Rock.</p>
+
+    <div class="actions pad">
+      <button class="primary" data-go="scan">${gl('camera', 30, 1.6)}
+        <span><span class="t">Take a photo</span>
+        <span class="s">Point your camera at the item</span></span></button>
+      <button class="secondary" data-go="search">${gl('search', 22, 1.8)} Search by name</button>
+    </div>
+
+    <p class="sec">More</p>
+    <div class="list">
+      <button class="row" data-go="schedule">${gl('calendar')}
+        <span class="txt"><span class="t">Pickup</span>
+        <span class="s">Your collection days and reminders</span></span>
+        <span class="val">${esc(next)}</span>${chev()}</button>
+      <button class="row" data-go="places">${gl('pin')}
+        <span class="txt"><span class="t">Drop-off</span>
+        <span class="s">Recycling centre, hazardous waste, brush</span></span>${chev()}</button>
+      <button class="row" data-go="services">${gl('truck')}
+        <span class="txt"><span class="t">Services</span>
+        <span class="s">Bulk pickup, brush collection, who to call</span></span>${chev()}</button>
+    </div>
+    <p class="foot">City of Round Rock rules &middot; <a href="tel:5122185554">512-218-5554</a></p>`;
+}
+
+/* ================= search ================= */
+let filterCat = null;
+
+function scoreItem(it, terms) {
+  const name = it.n.toLowerCase();
+  const hay = (it.n + ' ' + (it.tags || '') + ' ' + CATS[it.cat].name).toLowerCase();
+  let s = 0;
+  for (const t of terms) {
+    if (!hay.includes(t)) return -1;
+    if (name.startsWith(t)) s += 12;
+    else if (name.includes(' ' + t)) s += 8;
+    else if (name.includes(t)) s += 6;
+    else s += 2;
+  }
+  return s;
+}
+function search(qs) {
+  const terms = qs.toLowerCase().split(/\s+/).filter(Boolean);
+  let list = ITEMS.map(it => ({ it, s: terms.length ? scoreItem(it, terms) : 0 })).filter(x => x.s >= 0);
+  if (filterCat) list = list.filter(x => x.it.cat === filterCat);
+  list.sort(terms.length
+    ? (a, b) => b.s - a.s || a.it.n.localeCompare(b.it.n)
+    : (a, b) => a.it.n.localeCompare(b.it.n));
+  return list.map(x => x.it);
+}
+
+function renderFilters() {
+  const order = [null, 'recycle', 'trash', 'center', 'hhw', 'brush', 'bulk', 'other'];
+  $('#filters').innerHTML = order.map(k => {
+    const label = k === null ? 'All' : CATS[k].short;
+    const on = filterCat === k;
+    return `<button class="filt${on ? ' on' : ''}" role="tab" aria-selected="${on}"
+      data-cat="${k === null ? '' : k}">${esc(label)}</button>`;
+  }).join('');
+  $$('#filters .filt').forEach(b => b.onclick = () => {
+    filterCat = b.dataset.cat || null;
+    renderFilters(); renderResults();
+  });
+}
+
+/* Trigram similarity — a misspelling should still land somewhere sensible
+   (Ambler: Intuitability, Tolerance). */
+function trigrams(x) {
+  const t = new Set(), p = '  ' + x.toLowerCase() + ' ';
+  for (let i = 0; i < p.length - 2; i++) t.add(p.slice(i, i + 3));
+  return t;
+}
+function nearest(qs, n = 3) {
+  const q = trigrams(qs);
+  if (!q.size) return [];
+  return ITEMS.map(it => {
+    const t = trigrams(it.n + ' ' + (it.tags || ''));
+    let hit = 0;
+    q.forEach(g => { if (t.has(g)) hit++; });
+    return { it, score: hit / q.size };
+  }).filter(x => x.score > 0.3).sort((a, b) => b.score - a.score).slice(0, n).map(x => x.it);
+}
+
+function renderResults() {
+  const qs = $('#q').value.trim();
+  const list = search(qs);
+  $('#clearq').style.display = qs ? 'grid' : 'none';
+
+  if (!list.length) {
+    const near = nearest(qs);
+    $('#results').innerHTML =
+      `<div style="padding:34px 22px 8px">
+        <p style="font-size:calc(22px * var(--scale));letter-spacing:-.025em;margin-bottom:8px">
+          No exact match for “${esc(qs)}”</p>
+        <p style="color:var(--ink2);font-size:calc(var(--f-sub) * var(--scale));line-height:1.5">
+          ${near.length ? 'Here’s the closest thing we have.' : 'Try a simpler word — “bottle”, “box” or “paint” — or take a photo instead.'}</p>
+      </div>` +
+      (near.length
+        ? `<p class="sec">Did you mean</p><div class="list">` + near.map(it => {
+            const c = CATS[it.cat];
+            return `<button class="row" data-item="${ITEMS.indexOf(it)}">${gl(c.ico)}
+              <span class="txt"><span class="t">${esc(it.n)}</span>
+                <span class="s">${esc(c.name)}</span></span>${chev()}</button>`;
+          }).join('') + `</div>`
+        : '') +
+      `<div class="actions pad" style="padding-top:20px">
+        <button class="secondary" data-go="scan">${gl('camera', 22, 1.8)} Take a photo instead</button></div>`;
+    $('#resultCount').textContent = near.length
+      ? `No exact match. ${near.length} similar item${near.length > 1 ? 's' : ''} suggested.`
+      : 'No results.';
+    $$('#results .row').forEach(b => b.onclick = () => showAnswer(ITEMS[+b.dataset.item]));
+    return;
+  }
+
+  $('#results').innerHTML =
+    `<p class="sec">${qs ? list.length + (list.length > 1 ? ' results' : ' result') : 'All ' + list.length + ' items'}</p>` +
+    `<div class="list">` + list.slice(0, 200).map(it => {
+      const c = CATS[it.cat];
+      return `<button class="row" data-item="${ITEMS.indexOf(it)}">${gl(c.ico)}
+        <span class="txt"><span class="t">${esc(it.n)}</span>
+          <span class="s">${esc(c.name)}</span></span>${chev()}</button>`;
+    }).join('') + `</div>`;
+  $('#resultCount').textContent = `${list.length} item${list.length > 1 ? 's' : ''}`;
+  $$('#results .row').forEach(b => b.onclick = () => showAnswer(ITEMS[+b.dataset.item]));
+}
+
+$('#q').addEventListener('input', renderResults);
+$('#clearq').onclick = e => { e.preventDefault(); $('#q').value = ''; renderResults(); $('#q').focus(); };
+
+/* ================= answer ================= */
+function showAnswer(it, extra) {
+  const c = CATS[it.cat];
+  let h = `<div class="verdict" style="background:${c.color}">
+      ${gl(c.ico, 40, 1.5)}
+      <p class="cap">${esc(it.n)}</p>
+      <h2>${esc(c.name)}</h2>
+      <p>${esc(c.line)}</p>
+    </div>`;
+
+  if (extra && extra.confidence != null && extra.confidence < 0.6) {
+    h += `<div class="block"><h3>Worth a second look</h3>
+      <p class="dim">I think this is a ${esc(it.n)}, but I’m not sure. Check below, or look it up by name.</p></div>`;
+  }
+  if (extra && extra.why) h += `<div class="block"><h3>What I see</h3><p class="dim">${esc(extra.why)}</p></div>`;
+  if (it.note) h += `<div class="block"><h3>Do this first</h3><p>${esc(it.note)}</p></div>`;
+  if (c.when) h += `<div class="block"><h3>When &amp; where</h3><p class="dim">${esc(c.when)}</p></div>`;
+
+  // one primary action, chosen by where the item actually has to go
+  let acts;
+  if (['center', 'hhw', 'brush'].includes(it.cat)) {
+    const tel = it.cat === 'brush' ? '5122185540' : '5122185554';
+    acts = `<button class="primary" onclick="window.open('https://maps.apple.com/?q=310+Deepwood+Drive,+Round+Rock,+TX+78681','_blank')">
+        ${gl('map', 30, 1.6)}<span><span class="t">Get directions</span>
+        <span class="s">310 Deepwood Drive</span></span></button>
+      <a class="secondary" href="tel:${tel}">${gl('phone', 22, 1.8)} Call before you go</a>`;
+  } else if (it.cat === 'bulk') {
+    acts = `<a class="primary" href="tel:5122554980">${gl('phone', 30, 1.6)}
+        <span><span class="t">Call Republic Services</span>
+        <span class="s">Schedule a week ahead &middot; 512-255-4980</span></span></a>`;
+  } else if (it.cat === 'other') {
+    acts = `<button class="secondary" data-go="search">${gl('search', 22, 1.8)} Look up something else</button>`;
+  } else {
+    acts = `<button class="primary" data-go="schedule">${gl('calendar', 30, 1.6)}
+        <span><span class="t">Check your pickup day</span>
+        <span class="s">Set it once, then get reminders</span></span></button>`;
+  }
+  h += `<div class="actions pad" style="padding-top:26px">${acts}</div>`;
+
+  const rel = ITEMS.filter(x => x !== it && x.cat === it.cat).sort(() => .5 - Math.random()).slice(0, 4);
+  if (rel.length) {
+    h += `<p class="sec">Also goes here</p><div class="list">` + rel.map(r =>
+      `<button class="row" data-item2="${ITEMS.indexOf(r)}">${gl(c.ico)}
+        <span class="txt"><span class="t">${esc(r.n)}</span></span>${chev()}</button>`).join('') + `</div>`;
+  }
+  h += `<div class="actions pad"><button class="tertiary" data-go="search">Search for another item</button></div>`;
+
+  $('#s-answer').innerHTML = h;
+  $$('#s-answer [data-item2]').forEach(b => b.onclick = () => showAnswer(ITEMS[+b.dataset.item2]));
+  go('answer');
+}
+
+/* ================= camera ================= */
+function renderScan() {
+  const k = store.get('key', '');
+  $('#s-scan').innerHTML = `
+    <h1 class="large">Camera</h1>
+    <p class="lead">Hold the item so it fills most of the frame. Good light helps.</p>
+
+    <div class="actions pad">
+      <button class="primary" id="camBtn">${gl('camera', 30, 1.6)}
+        <span><span class="t">Take a photo</span>
+        <span class="s">Opens your camera</span></span></button>
+      <button class="secondary" id="libBtn">${gl('photo', 22, 1.8)} Choose from library</button>
+      <button class="tertiary" data-go="search">Search by name instead</button>
+    </div>
+
+    <input type="file" accept="image/*" capture="environment" id="camIn" hidden>
+    <input type="file" accept="image/*" id="libIn" hidden>
+
+    ${k ? `<p class="sec">Status</p>
+           <div class="list"><div class="row">${gl('check')}
+             <span class="txt"><span class="t">Photo identification is on</span>
+             <span class="s">Your key is saved on this device</span></span></div></div>`
+        : `<p class="sec">Before you start</p>
+           <div class="list"><button class="row" data-go="settings">${gl('key')}
+             <span class="txt"><span class="t">Add your API key</span>
+             <span class="s">A one-time setup, about two minutes</span></span>${chev()}</button></div>`}
+
+    <div id="busy" style="display:none;padding-top:24px">
+      <img id="preview" class="shot" alt="The photo you just took">
+      <div class="center"><div class="spin"></div>
+        <p>Identifying…</p>
+        <p style="color:var(--ink2);font-size:calc(var(--f-sub) * var(--scale));margin-top:4px">This takes a few seconds.</p></div>
+    </div>`;
+  $('#camBtn').onclick = () => $('#camIn').click();
+  $('#libBtn').onclick = () => $('#libIn').click();
+  $('#camIn').onchange = e => handlePhoto(e.target.files[0]);
+  $('#libIn').onchange = e => handlePhoto(e.target.files[0]);
+}
+
+function shrink(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), fr = new FileReader();
+    fr.onload = () => img.src = fr.result;
+    fr.onerror = rej;
+    img.onload = () => {
+      const max = 1100;
+      let { width: w, height: h } = img;
+      if (w > max || h > max) { const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r); }
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      res(cv.toDataURL('image/jpeg', .82));
+    };
+    img.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+function rulesPrompt() {
+  const byCat = {};
+  ITEMS.forEach(i => (byCat[i.cat] = byCat[i.cat] || []).push(i.n));
+  let t = 'ROUND ROCK, TEXAS DISPOSAL CATEGORIES:\n';
+  for (const k in CATS) t += `- ${k}: ${CATS[k].name}. ${CATS[k].line}\n`;
+  t += '\nKNOWN ITEMS BY CATEGORY (use the exact item name when one matches):\n';
+  for (const k in byCat) t += `${k}: ${byCat[k].join('; ')}\n`;
+  return t;
+}
+
+async function pickModel(key) {
+  const cached = store.get('model', '');
+  if (cached) return cached;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/models?limit=30', {
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
+    });
+    if (r.ok) {
+      const ids = ((await r.json()).data || []).map(m => m.id);
+      const m = ids.find(i => /sonnet/i.test(i)) || ids.find(i => /haiku/i.test(i)) || ids[0];
+      if (m) { store.set('model', m); return m; }
+    }
+  } catch (e) {}
+  return 'claude-sonnet-4-5';
+}
+
+function apiError(msg) {
+  $('#s-answer').innerHTML = `
+    <h1 class="large">Couldn’t identify that</h1>
+    <p class="lead">${esc(msg)}</p>
+    <div class="actions pad">
+      <button class="primary" data-go="search">${gl('search', 30, 1.6)}
+        <span><span class="t">Search by name</span>
+        <span class="s">115 items, nicknames included</span></span></button>
+      <button class="secondary" data-go="scan">${gl('camera', 22, 1.8)} Try another photo</button>
+      <button class="tertiary" data-go="settings">Open settings</button>
+    </div>`;
+  go('answer');
+}
+
+async function handlePhoto(file) {
+  if (!file) return;
+  const key = store.get('key', '');
+  let dataUrl;
+  try { dataUrl = await shrink(file); }
+  catch (e) { return apiError('That photo couldn’t be read. Please try again.'); }
+
+  $('#preview').src = dataUrl;
+  $('#busy').style.display = 'block';
+  $$('#s-scan > *').forEach(el => { if (el.id !== 'busy') el.style.display = 'none'; });
+
+  if (!key) return apiError('Photo identification needs a Claude API key. It takes about two minutes to set up, once.');
+
+  try {
+    const model = await pickModel(key);
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json', 'x-api-key': key,
+        'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model, max_tokens: 400,
+        system: 'You help residents of Round Rock, Texas sort their waste correctly. You must follow ONLY the Round Rock rules given to you — do not use general recycling advice from other cities. Answer in simple language a 10-year-old or an 80-year-old can follow. Reply with JSON only.',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl.split(',')[1] } },
+            { type: 'text', text: rulesPrompt() +
+              '\nLook at the photo. Identify the single main object a person is trying to throw away.\n' +
+              'Reply with ONLY this JSON, no other text:\n' +
+              '{"item":"short plain name of the object","match":"exact item name from the list above, or empty string if none fits","category":"recycle|trash|center|hhw|brush|bulk|other","why":"one short sentence describing what you see","tip":"one short sentence: what the person should do to prepare it","confidence":0.0}\n' +
+              'confidence is 0 to 1 for how sure you are about the object. If the photo is unclear, still give your best guess with low confidence.' }
+          ]
+        }]
+      })
+    });
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 403) { store.set('model', ''); throw new Error('KEY'); }
+      if (r.status === 404) { store.set('model', ''); throw new Error('MODEL'); }
+      if (r.status === 429) throw new Error('BUSY');
+      throw new Error((await r.text()).slice(0, 160));
+    }
+    const txt = ((await r.json()).content || []).map(c => c.text || '').join('');
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('PARSE');
+    const out = JSON.parse(m[0]);
+
+    let item = ITEMS.find(i => i.n.toLowerCase() === String(out.match || '').toLowerCase());
+    if (!item && out.match) item = search(out.match)[0];
+    if (!item && out.item) item = search(out.item)[0];
+    showAnswer({
+      n: out.item || (item ? item.n : 'This item'),
+      cat: CATS[out.category] ? out.category : (item ? item.cat : 'trash'),
+      note: item && item.note ? item.note : (out.tip || '')
+    }, { why: out.why, confidence: Number(out.confidence) });
+  } catch (e) {
+    apiError({
+      KEY: 'That API key wasn’t accepted. Check it in Settings.',
+      MODEL: 'The AI model wasn’t found. Tap “Reset AI model” in Settings and try again.',
+      BUSY: 'The service is busy right now. Wait a moment and try again.',
+      PARSE: 'The response couldn’t be read. Please try another photo.'
+    }[e.message] || 'Something went wrong reaching the service. Check your internet connection.');
+  }
+}
+
+/* ================= schedule ================= */
+const DAYNAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const fromIso = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+
+function nthDow(year, month, dow, n) {
+  const d = new Date(year, month, 1);
+  let c = 0;
+  for (;;) { if (d.getDay() === dow) { if (++c === n) return new Date(d); } d.setDate(d.getDate() + 1); }
+}
+function holidaysAround(year) {
+  return [nthDow(year, 10, 4, 4), new Date(year, 11, 25), new Date(year, 0, 1)];
+}
+/** The city slides collection one day for the rest of the week after these holidays. */
+function applyHoliday(base) {
+  let hols = [];
+  [base.getFullYear() - 1, base.getFullYear(), base.getFullYear() + 1].forEach(y => hols = hols.concat(holidaysAround(y)));
+  const ws = new Date(base); ws.setDate(base.getDate() - base.getDay());
+  const we = new Date(ws); we.setDate(ws.getDate() + 6);
+  for (const h of hols) {
+    if (h.getDay() === 0 || h.getDay() === 6) continue;   // weekend holidays don't shift collection
+    if (h >= ws && h <= we && base >= h) {
+      const d = new Date(base); d.setDate(d.getDate() + 1);
+      return { date: d, delayed: true };
+    }
+  }
+  return { date: base, delayed: false };
+}
+function upcoming(n) {
+  const gday = store.get('gday', null), anchor = store.get('anchor', null);
+  if (gday === null) return [];
+  const out = [], today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(today);
+  d.setDate(d.getDate() - 8);
+  while (d.getDay() !== gday) d.setDate(d.getDate() + 1);
+  let guard = 0;
+  while (out.length < n && guard++ < 200) {
+    const s = applyHoliday(new Date(d));
+    if (s.date >= today) {
+      const rec = anchor ? Math.abs(Math.round((d - fromIso(anchor)) / 864e5)) % 14 === 0 : false;
+      out.push({ base: new Date(d), date: s.date, delayed: s.delayed, recycling: rec });
+    }
+    d.setDate(d.getDate() + 7);
+  }
+  return out;
+}
+function friendlyDate(d) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const diff = Math.round((d - t) / 864e5);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  return DAYNAMES[d.getDay()] + ', ' + d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+}
+
+function renderSchedule() {
+  const el = $('#s-schedule');
+
+  if (store.get('gday', null) === null) {
+    el.innerHTML = `
+      <h1 class="large">Pickup</h1>
+      <p class="lead">Two quick questions and we’ll work out the rest — including the every-other-week recycling cycle and holiday delays.</p>
+      <p class="sec first">Step 1 of 2 &middot; Which day is your trash collected?</p>
+      <div class="dgrid" id="dg">${[1, 2, 3, 4, 5].map(i =>
+        `<button data-d="${i}">${DAYNAMES[i].slice(0, 3)}</button>`).join('')}</div>
+      <p class="foot">Not sure?
+        <a href="https://citysiteapps.roundrocktexas.gov/#/garbage-recycle" target="_blank" rel="noopener">Look up your address</a>
+        or call <a href="tel:5122554980">512-255-4980</a>.</p>
+      <div id="step2" style="opacity:.3;pointer-events:none">
+        <p class="sec">Step 2 of 2 &middot; When is recycling collected next?</p>
+        <div class="actions pad">
+          <button class="primary" id="aThis"><span><span class="t">This week</span>
+            <span class="s">Recycling goes out on your next trash day</span></span></button>
+          <button class="secondary" id="aNext">Next week instead</button>
+        </div>
+      </div>`;
+    let pick = null;
+    $$('#dg button').forEach(b => b.onclick = () => {
+      $$('#dg button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on'); pick = +b.dataset.d;
+      Object.assign($('#step2').style, { opacity: '1', pointerEvents: 'auto' });
+    });
+    const finish = weeks => {
+      if (pick === null) return;
+      const d = new Date(); d.setHours(0, 0, 0, 0);
+      while (d.getDay() !== pick) d.setDate(d.getDate() + 1);
+      d.setDate(d.getDate() + weeks * 7);
+      store.set('gday', pick); store.set('anchor', iso(d));
+      renderSchedule();
+      toast('Pickup days saved.');
+    };
+    $('#aThis').onclick = () => finish(0);
+    $('#aNext').onclick = () => finish(1);
+    return;
+  }
+
+  const list = upcoming(9), nx = list[0];
+  el.innerHTML = `
+    <h1 class="large">Pickup</h1>
+    <p class="lead">Your collection days, with holiday delays applied automatically.</p>
+
+    <div class="next">
+      <p class="cap">Next pickup</p>
+      <p class="date">${esc(friendlyDate(nx.date))}</p>
+      <p class="what">${nx.recycling ? 'Trash and recycling' : 'Trash only'}</p>
+      ${nx.delayed ? `<p class="flag">Moved a day later for the holiday</p>` : ''}
+    </div>
+
+    <div class="actions pad">
+      <button class="primary" id="icsBtn">${gl('bell', 30, 1.6)}
+        <span><span class="t">Add calendar reminders</span>
+        <span class="s">6 PM the night before, every time</span></span></button>
+    </div>
+
+    <p class="sec">How to set out</p>
+    <div class="block"><p>Carts at the curb before 7:00 AM. Wheels against the curb, lid closed, carts 3 feet apart.</p></div>
+
+    <p class="sec">Next few pickups</p>
+    <div class="list">${list.slice(1).map(x =>
+      `<div class="row">${gl(x.recycling ? 'recycle' : 'trash')}
+        <span class="txt"><span class="t">${esc(friendlyDate(x.date))}</span>
+          <span class="s">${x.recycling ? 'Trash and recycling' : 'Trash only'}</span></span>
+        ${x.delayed ? `<span class="val" style="color:var(--c-hhw)">+1 day</span>` : ''}
+      </div>`).join('')}</div>
+
+    <p class="sec">Holidays</p>
+    <div class="block"><p class="dim">${esc(HOLIDAYS_NOTE)}
+
+This app applies that rule automatically. During a holiday week it’s still worth confirming with Republic Services.</p></div>
+
+    <p class="sec">If something goes wrong</p>
+    <div class="list"><a class="row" href="tel:5122554980">${gl('phone')}
+      <span class="txt"><span class="t">Republic Services</span>
+      <span class="s">Call if your cart is still full after 6:30 PM</span></span>${chev()}</a></div>
+
+    <div class="actions pad" style="padding-top:20px">
+      <button class="tertiary warn" id="resetSched">Change my pickup days</button></div>`;
+
+  $('#resetSched').onclick = () => {
+    const prevDay = store.get('gday', null), prevAnchor = store.get('anchor', null);
+    store.set('gday', null); store.set('anchor', null); renderSchedule();
+    toast('Pickup days cleared.', () => {          // Tolerance: every destructive action is reversible
+      store.set('gday', prevDay); store.set('anchor', prevAnchor); renderSchedule();
+      toast('Pickup days restored.');
+    });
+  };
+  $('#icsBtn').onclick = makeIcs;
+}
+
+const pad = n => String(n).padStart(2, '0');
+const icsStamp = (d, hh, mm) => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + 'T' + pad(hh) + pad(mm) + '00';
+
+function makeIcs() {
+  const list = upcoming(3);
+  if (!list.length) return;
+  const firstTrash = new Date(list[0].base); firstTrash.setDate(firstTrash.getDate() - 1);
+  const firstRec = list.find(x => x.recycling);
+  const recDay = firstRec ? new Date(firstRec.base) : null;
+  if (recDay) recDay.setDate(recDay.getDate() - 1);
+  const DOW = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][firstTrash.getDay()];
+
+  // RFC 5545: escape TEXT values, then fold lines at 75 octets.
+  const tx = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const enc = new TextEncoder();
+  const fold = line => {
+    if (enc.encode(line).length <= 74) return line;
+    const out = []; let cur = '', len = 0;
+    for (const ch of line) {
+      const b = enc.encode(ch).length;
+      if (len + b > (out.length ? 73 : 74)) { out.push(cur); cur = ''; len = 0; }
+      cur += ch; len += b;
+    }
+    if (cur) out.push(cur);
+    return out[0] + out.slice(1).map(s => '\r\n ' + s).join('');
+  };
+
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Round Rock Waste Wizard//EN', 'CALSCALE:GREGORIAN'];
+  const ev = (uid, start, rrule, title, desc) => ics.push(
+    'BEGIN:VEVENT', 'UID:' + uid, 'DTSTAMP:' + icsStamp(new Date(), 12, 0),
+    'DTSTART:' + icsStamp(start, 18, 0), 'DTEND:' + icsStamp(start, 18, 15),
+    'RRULE:' + rrule, fold('SUMMARY:' + tx(title)), fold('DESCRIPTION:' + tx(desc)),
+    'BEGIN:VALARM', 'TRIGGER:PT0S', 'ACTION:DISPLAY', fold('DESCRIPTION:' + tx(title)), 'END:VALARM', 'END:VEVENT');
+
+  ev('rrw-trash-' + Date.now(), firstTrash, 'FREQ=WEEKLY;BYDAY=' + DOW,
+    'Put out the trash cart', 'Round Rock: cart at the curb before 7 AM. Lid closed, wheels to the curb.');
+  if (recDay) ev('rrw-rec-' + Date.now(), recDay, 'FREQ=WEEKLY;INTERVAL=2;BYDAY=' + DOW,
+    'Recycling cart too (plus trash)', 'Round Rock: everything loose in the cart. No plastic bags. Rinse containers and flatten boxes.');
+  ics.push('END:VCALENDAR');
+
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics.join('\r\n')], { type: 'text/calendar' }));
+  a.download = 'round-rock-pickup-reminders.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('Reminder file saved. Open it to add the events to your calendar.');
+}
+
+/* ================= places ================= */
+function renderPlaces() {
+  $('#s-places').innerHTML = `
+    <h1 class="large">Drop-off</h1>
+    <p class="lead">All three City drop-off services share one address, west of Round Rock High School.</p>
+
+    <div class="actions pad">
+      <button class="primary" onclick="window.open('https://maps.apple.com/?q=310+Deepwood+Drive,+Round+Rock,+TX+78681','_blank')">
+        ${gl('map', 30, 1.6)}<span><span class="t">Get directions</span>
+        <span class="s">310 Deepwood Drive, Round Rock, TX 78681</span></span></button>
+      <a class="secondary" href="tel:5122185554">${gl('phone', 22, 1.8)} Call 512-218-5554</a>
+    </div>
+
+    ${PLACES.map(p => `
+      <p class="sec">${esc(p.name)}</p>
+      <div class="list">
+        <div class="row">${gl('clock')}<span class="txt"><span class="t">${esc(p.hours)}</span></span></div>
+        <a class="row" href="tel:${p.phone.replace(/-/g, '')}">${gl('phone')}
+          <span class="txt"><span class="t" style="color:var(--accent)">${esc(p.phone)}</span></span>${chev()}</a>
+      </div>
+      <div class="block"><h3>They take</h3><p class="dim">${esc(p.takes)}</p></div>
+      <div class="block"><h3>Take these somewhere else</h3><p class="dim">${esc(p.avoid)}</p></div>`).join('')}
+
+    <p class="sec">While you’re there</p>
+    <div class="block"><h3>Free Re-USE building</h3>
+      <p class="dim">Take home free leftover paint, fertiliser, cleaning products, pool chemicals and automotive fluids that other residents dropped off. No charge.</p></div>`;
+}
+
+/* ================= services ================= */
+function renderServices() {
+  $('#s-services').innerHTML = `
+    <h1 class="large">Services</h1>
+    <p class="lead">Bulk pickup, brush collection, hazardous waste, and who to call when something goes wrong.</p>
+
+    <div class="actions pad">
+      <a class="primary" href="tel:5122554980">${gl('truck', 30, 1.6)}
+        <span><span class="t">Schedule a bulk pickup</span>
+        <span class="s">One free per year &middot; call a week ahead</span></span></a>
+      <button class="secondary"
+        onclick="window.open('https://www.roundrocktexas.gov/city-services/service-request/','_blank')">
+        ${gl('doc', 22, 1.8)} Report a missed pickup</button>
+    </div>
+
+    <p class="sec">What’s available</p>
+    <div class="list">${SERVICES.map((x, i) => `
+      <details${i === 0 ? ' open' : ''}>
+        <summary>${gl(x.ico)}<span class="t">${esc(x.t)}</span>
+          <span class="dc">${svg('chev', 15, 2.2)}</span></summary>
+        <div class="block"><p class="dim">${esc(x.body)}${x.no ? '\n\n' + esc(x.no) : ''}</p></div>
+      </details>`).join('')}</div>
+
+    <p class="sec">Who to call</p>
+    <div class="list">${CONTACTS.map(c =>
+      `<a class="row" href="tel:${c.phone.replace(/-/g, '')}">${gl('phone')}
+        <span class="txt"><span class="t">${esc(c.label)}</span>
+        <span class="s">${esc(c.who)} &middot; ${esc(c.phone)}</span></span>${chev()}</a>`).join('')}</div>`;
+}
+
+/* ================= settings ================= */
+function renderSettings() {
+  const key = store.get('key', ''), big = store.get('big', false);
+  $('#s-settings').innerHTML = `
+    <h1 class="large">Settings</h1>
+    <p class="lead">Text size, photo identification, and where these rules come from.</p>
+
+    <div class="actions pad">
+      <button class="primary" id="bigBtn">${gl('textsize', 30, 1.6)}
+        <span><span class="t">Larger text</span>
+        <span class="s">Currently ${big ? 'on — everything is 16% bigger' : 'off — tap to enlarge everything'}</span></span></button>
+    </div>
+
+    <p class="sec">Photo identification</p>
+    <div class="list">
+      <div class="row">${gl('key')}
+        <span class="txt"><span class="t">Claude API key</span>
+        <span class="s">${key ? 'Saved on this device' : 'Not set — the camera needs this'}</span></span></div>
+      <div class="row">
+        <input type="password" id="keyIn" placeholder="sk-ant-…" value="${esc(key)}"
+          aria-label="Claude API key" autocomplete="off" spellcheck="false"
+          style="width:100%;border:0;background:none;outline:none;color:var(--ink);font:inherit">
+      </div>
+    </div>
+    <div class="actions pad">
+      <button class="secondary" id="saveKey">${gl('check', 22, 2)} Save key</button>
+      ${key ? '<button class="tertiary warn" id="clearKey">Remove key</button>' : ''}
+      <button class="tertiary warn" id="resetModel">Reset AI model</button>
+    </div>
+    <div class="list">
+      <details><summary>${gl('info')}<span class="t">How do I get a key?</span>
+        <span class="dc">${svg('chev', 15, 2.2)}</span></summary>
+        <div class="block"><p class="dim">1. Go to console.anthropic.com
+2. Create a free account
+3. Open “API Keys” and click “Create Key”
+4. Copy it and paste it above
+
+Your key stays on this device and is sent only to Anthropic. Identifying one photo costs a fraction of a cent.</p></div></details>
+    </div>
+
+    <p class="sec">Pickup</p>
+    <div class="list">
+      <button class="row" data-go="schedule">${gl('calendar')}
+        <span class="txt"><span class="t">Pickup</span>
+        <span class="s">Your collection days and reminders</span></span>
+        <span class="val">${store.get('gday', null) === null ? 'Not set' : DAYNAMES[store.get('gday', 1)]}</span>${chev()}</button>
+    </div>
+
+    <p class="sec">Install</p>
+    <div class="block"><h3>Add to home screen</h3>
+      <p class="dim">iPhone: tap Share, then “Add to Home Screen.”
+Android: tap the ⋮ menu, then “Add to Home screen.”</p></div>
+
+    <p class="sec">Where these rules come from</p>
+    <div class="list">${SOURCES.map(x =>
+      `<a class="row" href="${x[1]}" target="_blank" rel="noopener">${gl('doc')}
+        <span class="txt"><span class="t" style="color:var(--accent)">${esc(x[0])}</span></span>${chev()}</a>`).join('')}</div>
+    <p class="foot" style="padding-bottom:24px">Every rule comes from the City of Round Rock’s published pages.
+      Rules change — when in doubt, call <a href="tel:5122185554">512-218-5554</a>.
+      This is an unofficial community app, not made by the City of Round Rock.</p>`;
+
+  $('#bigBtn').onclick = () => {
+    const v = !store.get('big', false);
+    store.set('big', v); applyBig(); renderSettings();
+    toast(v ? 'Larger text is on.' : 'Larger text is off.');
+  };
+  $('#saveKey').onclick = () => {
+    const v = $('#keyIn').value.trim();
+    store.set('key', v); store.set('model', '');
+    renderSettings();
+    toast(v ? 'Key saved. Photo identification is ready.' : 'Key removed.');
+  };
+  const ck = $('#clearKey');
+  if (ck) ck.onclick = () => {
+    const prev = store.get('key', '');
+    store.set('key', ''); store.set('model', ''); renderSettings();
+    toast('Key removed.', () => { store.set('key', prev); renderSettings(); toast('Key restored.'); });
+  };
+  $('#resetModel').onclick = () => { store.set('model', ''); toast('The app will choose the model again on your next photo.'); };
+}
+function applyBig() {
+  document.documentElement.style.setProperty('--scale', store.get('big', false) ? '1.16' : '1');
+}
+
+/* ================= start ================= */
+applyBig();
+renderHome();
+renderFilters();
+renderResults();
+
+</script>
+</body>
+</html>
