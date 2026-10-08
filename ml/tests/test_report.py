@@ -3,7 +3,7 @@ import json
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -13,7 +13,9 @@ import report  # noqa: E402
 TRUTH_CFG = {
     'classes': {
         'aluminum_can': {'bin': 'recycle', 'sources': []},
+        'food_can': {'bin': 'recycle', 'sources': []},
         'aerosol_can': {'bin': 'hhw', 'sources': []},
+        'styrofoam_food': {'bin': 'center', 'sources': []},
         'cardboard_box': {'bin': 'recycle', 'sources': []},
         'paper': {'bin': 'recycle', 'sources': []},
         'not_waste': {'bin': 'none', 'sources': []},
@@ -89,6 +91,51 @@ class ScoreTests(unittest.TestCase):
         self.assertIsNone(s['item_top1'])
         self.assertIsNone(s['item_top3'])
         self.assertEqual(s['bin_acc'], 1.0)
+
+
+class OpenSetScoreTests(unittest.TestCase):
+    def test_unlisted_truth_bin_needs_no_config(self):
+        self.assertEqual(report.truth_bins_for(['unlisted__hhw', 'paper'], BINS)['unlisted__hhw'],
+                         'hhw')
+
+    def test_unknown_truth_label_is_config_error(self):
+        with self.assertRaises(ValueError) as cm:
+            report.truth_bins_for(['paper', 'pint_can'], BINS)
+        self.assertIn('pint_can', str(cm.exception))
+
+    def test_unlisted_with_unknown_bin_is_config_error(self):
+        with self.assertRaises(ValueError):
+            report.truth_bins_for(['unlisted__hazard'], BINS)
+
+    def test_unlisted_excluded_from_item_metrics_but_in_bin_and_hazard(self):
+        tb = report.truth_bins_for(['paper', 'unlisted__hhw', 'unlisted__recycle'], BINS)
+        preds = [
+            pred('paper', ('paper', 0.9)),
+            pred('unlisted__hhw', ('food_can', 0.9)),
+            pred('unlisted__recycle', ('aluminum_can', 0.9)),
+        ]
+        s = report.score(preds, tb, BINS)
+        self.assertEqual(s['n'], 3)
+        self.assertEqual(s['item_top1'], 1.0)
+        self.assertEqual(s['item_top3'], 1.0)
+        self.assertAlmostEqual(s['bin_acc'], 2 / 3)
+        self.assertEqual(s['hazard_misses'], 1)
+        self.assertNotIn('unlisted__hhw', s['worst_classes'])
+
+    def test_unlisted_out_of_coverage_but_in_wrong_bin(self):
+        tb = report.truth_bins_for(['paper', 'unlisted__hhw'], BINS)
+        preds = [pred('paper', ('paper', 0.9)), pred('unlisted__hhw', ('food_can', 0.9))]
+        row = report.sweep(preds, tb, BINS)[0]
+        self.assertEqual(row['coverage'], 1.0)
+        self.assertEqual(row['accepted'], 2)
+        self.assertEqual(row['wrong_bin_rate'], 0.5)
+        self.assertEqual(row['item_acc'], 1.0)
+
+    def test_only_unlisted_item_top1_is_none(self):
+        tb = report.truth_bins_for(['unlisted__hhw'], BINS)
+        s = report.score([pred('unlisted__hhw', ('food_can', 0.9))], tb, BINS)
+        self.assertIsNone(s['item_top1'])
+        self.assertEqual(s['bin_acc'], 0.0)
 
 
 class SweepTests(unittest.TestCase):
@@ -280,6 +327,74 @@ class CliTests(unittest.TestCase):
         _, out, _ = self.run_cli(preds, ['--confirm-below', '0.62'])
         self.assertEqual(out['effective_accept'], 0.62)
         self.assertEqual(out['coverage_at_effective'], 1.0)
+
+    def test_unknown_truth_label_exits_1_with_message(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / 'p.json').write_text(json.dumps([pred('pint_can', ('paper', 0.9))]))
+            (d / 'c.json').write_text(json.dumps(TRUTH_CFG))
+            err = io.StringIO()
+            with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                code = report.main(['--predictions', str(d / 'p.json'),
+                                    '--truth-config', str(d / 'c.json'),
+                                    '--out', str(d / 'out.json')])
+            self.assertEqual(code, 1)
+            self.assertIn('pint_can', err.getvalue())
+            self.assertFalse((d / 'out.json').exists())
+
+    def test_reviewer_repro_hazard_miss_at_effective_exits_3(self):
+        # 2/110 wrong-bin is under the 2 % cap, so the old gate passed (exit 0),
+        # but both misses send a hazardous aerosol can to the recycling cart.
+        preds = [pred('paper', ('paper', 0.95)) for _ in range(100)]
+        preds += [pred('aerosol_can', ('aerosol_can', 0.95)) for _ in range(8)]
+        preds += [pred('aerosol_can', ('aluminum_can', 0.95)) for _ in range(2)]
+        code, out, text = self.run_cli(preds, ['--require', 'item=0.80,bin=0.92,coverage=0.65'])
+        self.assertLessEqual(out['wrong_bin_at_effective'], 0.02)
+        self.assertEqual(out['missed'], [])
+        self.assertEqual(out['hazard_misses_at_effective'], 2)
+        self.assertEqual(code, 3)
+        self.assertIn('hazardous misses at effective accept', text)
+        code, _, _ = self.run_cli(preds, ['--require', 'item=0.80,bin=0.92'])
+        self.assertEqual(code, 0)
+
+    def test_unlisted_hhw_counts_as_hazard_miss_at_effective(self):
+        preds = [pred('paper', ('paper', 0.95)) for _ in range(100)]
+        preds += [pred('unlisted__hhw', ('food_can', 0.95))]
+        code, out, _ = self.run_cli(preds, ['--require', 'coverage=0.65'])
+        self.assertEqual(out['hazard_misses_at_effective'], 1)
+        self.assertEqual(out['item_top1'], 1.0)
+        self.assertEqual(out['open_set'],
+                         {'n': 1, 'accepted_at_effective': 1, 'wrong_bin_at_effective': 1})
+        self.assertEqual(code, 3)
+
+    def test_hazard_miss_below_effective_not_counted(self):
+        preds = [pred('paper', ('paper', 0.95)) for _ in range(100)]
+        preds += [pred('aerosol_can', ('aluminum_can', 0.5))]
+        code, out, _ = self.run_cli(preds, ['--require', 'coverage=0.65'])
+        self.assertEqual(out['effective_accept'], 0.6)
+        self.assertEqual(out['hazard_misses'], 1)
+        self.assertEqual(out['hazard_misses_at_effective'], 0)
+        self.assertEqual(code, 0)
+
+    def test_center_misses_at_effective_is_informational(self):
+        preds = [pred('paper', ('paper', 0.95)) for _ in range(100)]
+        preds += [pred('styrofoam_food', ('paper', 0.95))]
+        code, out, text = self.run_cli(preds, ['--require', 'coverage=0.65'])
+        self.assertEqual(out['center_misses_at_effective'], 1)
+        self.assertEqual(out['hazard_misses_at_effective'], 0)
+        self.assertIn('drop-off misses at effective accept', text)
+        self.assertEqual(code, 0)
+
+    def test_open_set_without_unlisted_photos(self):
+        _, out, _ = self.run_cli([pred('paper', ('paper', 0.9))], [])
+        self.assertEqual(out['open_set'],
+                         {'n': 0, 'accepted_at_effective': 0, 'wrong_bin_at_effective': 0})
+
+    def test_at_effective_metrics_none_without_threshold(self):
+        _, out, _ = self.run_cli(self.NO_THRESHOLD, [])
+        self.assertIsNone(out['hazard_misses_at_effective'])
+        self.assertIsNone(out['center_misses_at_effective'])
+        self.assertIsNone(out['open_set']['accepted_at_effective'])
 
     def test_pred_config_defaults_and_all_met(self):
         preds = [pred('paper', ('paper', 0.9))]

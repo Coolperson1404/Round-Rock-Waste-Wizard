@@ -59,3 +59,8 @@ test('installed item model labels are all mapped', (t) => {
 test('loadItems parses all 116 items', () => {
   assert.equal(loadItems().length, 116);
 });
+
+test('maxTrain caps the item model only', () => {
+  assert.equal(readJson('ml/sources.json').maxTrain, 500);
+  assert.ok(!('maxTrain' in readJson('ml/materials.json')));
+});

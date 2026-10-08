@@ -4,6 +4,7 @@
   "testPercent": 15,
   "minTrain": 40,
   "minTest": 10,
+  "maxTrain": 500,
   "classes": {
     "cardboard_box": {
       "bin": "recycle",
