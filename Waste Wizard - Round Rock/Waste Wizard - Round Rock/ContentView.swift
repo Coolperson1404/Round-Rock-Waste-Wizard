@@ -137,13 +137,19 @@ final class VisionBridge: NSObject, WKScriptMessageHandlerWithReply {
 
     private let queue = DispatchQueue(label: "VisionBridge.work", qos: .userInitiated)
 
-    /// Loaded once. Xcode compiles WasteMaterial.mlmodel into the bundle.
-    private static let materialModel: VNCoreMLModel? = {
-        guard let url = Bundle.main.url(forResource: "WasteMaterial", withExtension: "mlmodelc"),
+    /// Loads a compiled Core ML model (`<name>.mlmodelc`) from the bundle, or
+    /// nil when it isn't bundled. Xcode compiles a dropped-in `<name>.mlmodel`
+    /// into the bundle automatically.
+    private static func loadModel(_ name: String) -> VNCoreMLModel? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "mlmodelc"),
               let ml = try? MLModel(contentsOf: url),
               let vn = try? VNCoreMLModel(for: ml) else { return nil }
         return vn
-    }()
+    }
+
+    /// Loaded once each.
+    private static let materialModel = loadModel("WasteMaterial")
+    private static let itemModel = loadModel("WasteItems")
 
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage,
@@ -235,26 +241,37 @@ final class VisionBridge: NSObject, WKScriptMessageHandlerWithReply {
                 }
             }
 
+            // Runs a bundled classifier and reports its top `top` labels under
+            // `key`, or records "model not bundled" (and sets no key) if absent.
+            func classify(_ op: String, model: VNCoreMLModel?, key: String, top: Int) {
+                guard let model else {
+                    errors[op] = "model not bundled"
+                    return
+                }
+                let revisions = VNCoreMLRequest.supportedRevisions.sorted(by: >)
+                let found = run(op, revisions: revisions) {
+                    let r = VNCoreMLRequest(model: model)
+                    r.imageCropAndScaleOption = .centerCrop
+                    return r
+                }
+                result[key] = found
+                    .compactMap { $0 as? VNClassificationObservation }
+                    .sorted { $0.confidence > $1.confidence }
+                    .prefix(top)
+                    .map { ["value": $0.identifier, "confidence": Double($0.confidence)] }
+            }
+
             if ops.contains("material") {
                 // Purpose-trained on waste materials. It only has to separate six
                 // materials rather than a thousand ImageNet classes, which is why
                 // it avoids errors like calling an aluminium can "hair spray" and
                 // routing it to hazardous waste.
-                if let model = Self.materialModel {
-                    let revisions = VNCoreMLRequest.supportedRevisions.sorted(by: >)
-                    let found = run("material", revisions: revisions) {
-                        let r = VNCoreMLRequest(model: model)
-                        r.imageCropAndScaleOption = .centerCrop
-                        return r
-                    }
-                    result["materials"] = found
-                        .compactMap { $0 as? VNClassificationObservation }
-                        .sorted { $0.confidence > $1.confidence }
-                        .prefix(3)
-                        .map { ["value": $0.identifier, "confidence": Double($0.confidence)] }
-                } else {
-                    errors["material"] = "model not bundled"
-                }
+                classify("material", model: Self.materialModel, key: "materials", top: 3)
+            }
+
+            if ops.contains("item") {
+                // Trained on the app's own item categories (WasteItems.mlmodel).
+                classify("item", model: Self.itemModel, key: "items", top: 5)
             }
 
             if ops.contains("featureprint") {
