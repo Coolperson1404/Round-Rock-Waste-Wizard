@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# End-to-end smoke test for ml/train.swift and ml/predict.swift on a tiny 2-class slice.
+# Not part of `npm test` (needs macOS + Create ML). Writes only under a temp dir.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+DATA="$WORK/smoke"
+MODEL="$WORK/model/Smoke.mlmodel"
+LABELS="$WORK/model/Smoke.labels.txt"
+PREDS="$WORK/predictions.json"
+mkdir -p "$WORK/model"
+
+echo "== prepare"
+python3 "$REPO/ml/prepare_data.py" --config "$REPO/ml/tests/fixtures/smoke.json" \
+  --out "$DATA" --root "$REPO"
+
+echo "== prune to 20 train / 5 test per class"
+prune() { # dir, keep
+  local dir="$1" keep="$2"
+  ls "$dir" | sort | tail -n +"$((keep + 1))" | while IFS= read -r f; do rm -f "$dir/$f"; done
+}
+for label in glass paper; do
+  prune "$DATA/train/$label" 20
+  prune "$DATA/test/$label" 5
+done
+
+echo "== train"
+swift "$REPO/ml/train.swift" --train "$DATA/train" --model-out "$MODEL" --iterations 5
+
+echo "== predict"
+swift "$REPO/ml/predict.swift" --model "$MODEL" --test "$DATA/test" --out "$PREDS"
+
+echo "== assert"
+python3 -c '
+import json, sys
+preds = json.load(open(sys.argv[1]))
+assert len(preds) == 10, f"expected 10 predictions, got {len(preds)}"
+for p in preds:
+    assert len(p["top"]) == 2, p
+    assert p["truth"] in ("glass", "paper"), p["truth"]
+labels = open(sys.argv[2]).read()
+assert labels == "glass\npaper\n", repr(labels)
+' "$PREDS" "$LABELS"
+
+echo "SMOKE OK"

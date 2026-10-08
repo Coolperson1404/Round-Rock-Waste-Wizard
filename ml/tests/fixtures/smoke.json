@@ -1,0 +1,21 @@
+{
+  "model": "SmokeTest",
+  "ownPhotos": false,
+  "testPercent": 15,
+  "minTrain": 1,
+  "minTest": 1,
+  "classes": {
+    "glass": {
+      "bin": "recycle",
+      "sources": [
+        {"type": "folder", "path": "Garbage Dataset/standardized_384/glass", "split": "hash"}
+      ]
+    },
+    "paper": {
+      "bin": "recycle",
+      "sources": [
+        {"type": "folder", "path": "Garbage Dataset/standardized_384/paper", "split": "hash"}
+      ]
+    }
+  }
+}
