@@ -4109,6 +4109,17 @@
           { confirmBelow: CONFIRM_BELOW });
         _lastScanSignals.items = v ? v.candidates.map(i => i.n) : [];
         if (v && v.kind === 'not_waste') {
+          // What the user taught the app outranks the model's "nothing here":
+          // hand a learned object to deliverScanResult, which re-checks visual
+          // memory and corrections first and shows its own badge.
+          const sig = _lastScanSignals;
+          const learnedHit = (sig.featureprint && !sig.barcode && VisualMemory.match(sig.featureprint))
+            || Corrections.lookup(sig, null);
+          if (learnedHit) {
+            await deliverScanResult({ n: learnedHit.item.n, cat: learnedHit.item.cat, note: learnedHit.item.note || '' },
+              { confidence: null });
+            return;
+          }
           showItemChooser({
             title: 'Nothing to sort here?',
             lead: 'I could not spot one item to throw away in that photo. Fill the frame with just that item and try again, or pick it below.',
