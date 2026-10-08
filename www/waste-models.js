@@ -108,14 +108,7 @@
     if (!ranked.length || ranked[0].confidence < suggest) return null;
     const top = ranked[0];
 
-    if (top.label === NOT_WASTE) {
-      return {
-        kind: 'not_waste', item: null, confidence: top.confidence, candidates: [],
-        why: 'On-device item model does not see a waste item here.',
-        badge: 'Item model: not waste (' + Math.round(top.confidence * 100) + '%)'
-      };
-    }
-
+    /* The top 3 distinct mapped items, at any confidence. */
     const candidates = [];
     for (const r of ranked) {
       if (!r.item || candidates.indexOf(r.item) !== -1) continue;
@@ -123,8 +116,28 @@
       if (candidates.length === 3) break;
     }
 
+    if (top.label === NOT_WASTE) {
+      /* The item guesses still lead the "nothing here?" chooser. */
+      return {
+        kind: 'not_waste', item: null, confidence: top.confidence, candidates: candidates,
+        why: 'On-device item model does not see a waste item here.',
+        badge: 'Item model: not waste (' + Math.round(top.confidence * 100) + '%)'
+      };
+    }
+
     const effectiveAccept = Math.max(accept, confirmBelow);
-    const isAnswer = top.confidence >= effectiveAccept;
+    let isAnswer = top.confidence >= effectiveAccept;
+    if (isAnswer && top.item.cat !== 'hhw') {
+      /* Safety net: a closed-set model can be confidently wrong about a
+         hazardous item. If a hazardous item is a plausible runner-up, ask
+         instead of sending it to the cart. */
+      const hazard = ranked.slice(1, 3).find(r =>
+        r.item && r.item.cat === 'hhw' && r.confidence >= suggest);
+      if (hazard) {
+        isAnswer = false;
+        if (candidates.indexOf(hazard.item) === -1) candidates.splice(candidates.length - 1, 1, hazard.item);
+      }
+    }
     const confidence = isAnswer ? top.confidence : Math.min(top.confidence, confirmBelow - 0.01);
     return {
       kind: isAnswer ? 'answer' : 'ask',

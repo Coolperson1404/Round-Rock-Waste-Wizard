@@ -44,6 +44,51 @@ test('not_waste', () => {
   assert.deepStrictEqual(v.candidates, []);
 });
 
+test('not_waste keeps the item guesses (any confidence) for the chooser', () => {
+  const v = WM.interpretItems([
+    { value: 'not_waste', confidence: 0.8 },
+    { value: 'aluminum_can', confidence: 0.1 },
+    { value: 'food_can', confidence: 0.05 },
+    { value: 'paper', confidence: 0.03 },
+    { value: 'battery', confidence: 0.01 }
+  ], ITEMS, ACCEPT);
+  assert.strictEqual(v.kind, 'not_waste');
+  assert.strictEqual(v.item, null);
+  assert.deepStrictEqual(v.candidates.map(c => c.n),
+    ['Aluminum can', 'Soup or vegetable can', 'Junk mail, letters, envelopes']);
+});
+
+test('a plausible hazardous runner-up turns an answer into a question', () => {
+  const v = WM.interpretItems(
+    [{ value: 'aluminum_can', confidence: 0.80 }, { value: 'aerosol_can', confidence: 0.40 }], ITEMS, ACCEPT);
+  assert.strictEqual(v.kind, 'ask');
+  assert.strictEqual(v.item.n, 'Aluminum can');
+  assert.strictEqual(v.confidence, 0.59);
+  assert.ok(v.candidates.some(c => c.n === 'Aerosol can (hairspray, spray paint)'));
+  assert.strictEqual(v.badge, 'Item model: Aluminum can (59%)');
+});
+
+test('the hazard check looks only at the top 3', () => {
+  const v = WM.interpretItems([
+    { value: 'aluminum_can', confidence: 0.80 }, { value: 'food_can', confidence: 0.45 },
+    { value: 'foil_tin', confidence: 0.42 }, { value: 'aerosol_can', confidence: 0.40 }
+  ], ITEMS, ACCEPT);
+  assert.strictEqual(v.kind, 'answer');
+});
+
+test('a hazardous runner-up below suggest does not block an answer', () => {
+  const v = WM.interpretItems(
+    [{ value: 'aluminum_can', confidence: 0.80 }, { value: 'aerosol_can', confidence: 0.30 }], ITEMS, ACCEPT);
+  assert.strictEqual(v.kind, 'answer');
+  assert.strictEqual(v.confidence, 0.80);
+});
+
+test('a hazardous top answer is not downgraded by another hazardous guess', () => {
+  const v = WM.interpretItems(
+    [{ value: 'aerosol_can', confidence: 0.80 }, { value: 'paint_can', confidence: 0.40 }], ITEMS, ACCEPT);
+  assert.strictEqual(v.kind, 'answer');
+});
+
 test('no opinion below suggest', () => {
   assert.strictEqual(WM.interpretItems([{ value: 'aluminum_can', confidence: 0.2 }], ITEMS, ACCEPT), null);
 });

@@ -2405,6 +2405,14 @@
        Absent everywhere else (browser, Capacitor), where callers fall back. */
     const NATIVE_VISION_CHANNEL = 'vision';
 
+    /** True when the only native failure is the item model being absent — the
+        normal state until one ships, and not worth a console warning. */
+    function _benignVisionErrors(errors) {
+      if (!errors || typeof errors !== 'object') return false;
+      const keys = Object.keys(errors);
+      return keys.length === 1 && keys[0] === 'item' && errors.item === 'model not bundled';
+    }
+
     const NativeVision = {
       get available() {
         return !!(window.webkit && window.webkit.messageHandlers
@@ -2421,7 +2429,9 @@
           // A per-op failure is reported here rather than thrown: image
           // classification is unavailable in the Simulator, and that must not
           // discard the barcode and text results from the same pass.
-          if (res.errors) console.warn('Native Vision partial failure:', res.errors);
+          if (res.errors && !_benignVisionErrors(res.errors)) {
+            console.warn('Native Vision partial failure:', res.errors);
+          }
           return {
             barcodes: res.barcodes || [], text: res.text || [],
             classes: res.classes || [], materials: res.materials || [],
@@ -3629,7 +3639,18 @@
         const n = String(c || '').toLowerCase().split(',')[0].trim();
         if (n) keys.push(['cls:' + n, 0.75]);
       });
+      // The item model's top candidate (an ITEMS name). MobileNet classes are
+      // empty when the item model ran, so without this nothing would be learned.
+      if (sig.items && sig.items.length) keys.push(['itm:' + sig.items[0], 0.75]);
       return keys;
+    }
+
+    /* A broad key names a kind of thing, not this exact item: ImageNet's
+       "water bottle" class, or the item model's top guess, covers a PET bottle
+       and a steel flask alike. Corrections on broad keys are trusted only once
+       taught twice, or when the pipeline is unsure anyway. */
+    function isBroadKey(k) {
+      return /^(cls|itm):/.test(k);
     }
 
     /* ---------- trained material classifier (iOS only) ----------
@@ -3735,10 +3756,11 @@
         for (const [k, baseConf] of signalKeys(sig)) {
           const hit = m[k];
           if (!hit || !hit.item) continue;
-          // A class key is broad — ImageNet's "water bottle" covers both a PET
-          // bottle and a steel flask — so only let it override once it has been
-          // taught twice, or when the pipeline was unsure anyway.
-          if (k.indexOf('cls:') === 0 && (hit.hits || 1) < 2 &&
+          // A broad key (an ImageNet class or the item model's guess) covers
+          // more than one real item — "water bottle" is a PET bottle and a steel
+          // flask alike — so only let it override once it has been taught twice,
+          // or when the pipeline was unsure anyway.
+          if (isBroadKey(k) && (hit.hits || 1) < 2 &&
               currentConfidence != null && currentConfidence >= 0.7) continue;
           const item = ITEMS.find(i => i.n === hit.item);
           if (item) {
@@ -3898,14 +3920,14 @@
 
       const learned = Corrections.lookup(sig, conf);
 
-      // A correction matched only on the broad class key is weak evidence: the
+      // A correction matched only on a broad key (cls: or itm:) is weak evidence: the
       // ImageNet class "water bottle" covers a disposable PET bottle and a steel
       // flask alike, so teaching one must not silently relabel the other. When
       // the pipeline was also unsure, offer it as the leading suggestion instead
       // of asserting it.
       // Once the same correction has been confirmed twice, stop asking and just
       // use it — otherwise the app would re-ask the same question forever.
-      if (learned && learned.key.indexOf('cls:') === 0 && learned.hits < 2 &&
+      if (learned && isBroadKey(learned.key) && learned.hits < 2 &&
           conf != null && conf < CONFIRM_BELOW) {
         return showItemChooser({
           title: 'Is this the same one again?',
@@ -4111,13 +4133,16 @@
         if (v && v.kind === 'not_waste') {
           // What the user taught the app outranks the model's "nothing here":
           // hand a learned object to deliverScanResult, which re-checks visual
-          // memory and corrections first and shows its own badge.
+          // memory and corrections first and shows its own badge. The not_waste
+          // confidence is the pipeline's confidence here, so a once-taught broad
+          // key (itm:/cls:) does not override a confident "nothing here", and
+          // below CONFIRM_BELOW it is asked about rather than asserted.
           const sig = _lastScanSignals;
           const learnedHit = (sig.featureprint && !sig.barcode && VisualMemory.match(sig.featureprint))
-            || Corrections.lookup(sig, null);
+            || Corrections.lookup(sig, v.confidence);
           if (learnedHit) {
             await deliverScanResult({ n: learnedHit.item.n, cat: learnedHit.item.cat, note: learnedHit.item.note || '' },
-              { confidence: null });
+              { confidence: v.confidence });
             return;
           }
           showItemChooser({
