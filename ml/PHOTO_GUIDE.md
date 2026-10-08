@@ -98,6 +98,14 @@ converts them. JPEG, PNG and WebP also work.
 python3 ml/prepare_data.py --config ml/sources.json --out ml/build/items
 ```
 
-It prints the train/test counts for each class and flags the ones still short (`<-- short`).
+This command needs the TACO dataset to be downloaded into `ml/data/taco/` first (the workflow
+downloads TACO before photo collection). Until `ml/data/taco/data/annotations.json` exists it
+stops with exit code 1 and an error like:
+
+```
+config error: cardboard_box: COCO annotations not found: .../ml/data/taco/data/annotations.json
+```
+
+Once TACO is in place, it prints the train/test counts for each class and flags the ones still short (`<-- short`).
 Add `--check` to only validate the config, or `--drop-underfilled` to leave short classes out of
 the build. The same counts are written to `ml/build/items/summary.json`.

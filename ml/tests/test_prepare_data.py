@@ -167,8 +167,9 @@ class LeakAndSummaryTests(TmpRoot):
 
 
 class MainTests(TmpRoot):
-    def run_main(self, cfg_path, *extra):
-        return prepare_data.main(['--config', str(cfg_path), '--out', str(self.root / 'out'),
+    def run_main(self, cfg_path, *extra, out=None):
+        return prepare_data.main(['--config', str(cfg_path),
+                                  '--out', str(out if out is not None else self.root / 'out'),
                                   '--root', str(self.root), *extra])
 
     def test_leak_detected_exits_2(self):
@@ -215,6 +216,46 @@ class MainTests(TmpRoot):
              'categories': ['A'], 'split': 'train'}]}})
         self.assertEqual(self.run_main(bad, '--check'), 1)
         self.assertEqual(self.run_main(bad), 1)
+
+
+class UnsafeOutTests(TmpRoot):
+    run_main = MainTests.run_main
+
+    def cfg(self):
+        make_jpeg(self.root / 'ml/data/own/x/a.jpg')
+        return self.write_config({'x': {'bin': 'none', 'sources': []}})
+
+    def test_out_equal_to_root_refused_and_nothing_deleted(self):
+        cfg = self.cfg()
+        keep = self.root / 'train' / 'keep.jpg'
+        make_jpeg(keep)
+        self.assertEqual(self.run_main(cfg, out=self.root), 1)
+        self.assertTrue(keep.exists())
+        self.assertFalse((self.root / 'summary.json').exists())
+
+    def test_out_inside_source_folder_refused(self):
+        cfg = self.cfg()
+        self.assertEqual(self.run_main(cfg, out=self.root / 'ml/data/own/x/build'), 1)
+        self.assertEqual(self.run_main(cfg, out=self.root / 'ml/data/own'), 1)
+        self.assertFalse((self.root / 'ml/data/own/x/build').exists())
+
+    def test_out_containing_source_folder_refused_and_keeps_existing(self):
+        keep = self.root / 'out' / 'train' / 'keep.jpg'
+        make_jpeg(keep)
+        make_jpeg(self.root / 'out' / 'src' / 'p.jpg')
+        cfg = self.write_config({'x': {'bin': 'none', 'sources': [
+            {'type': 'folder', 'path': 'out/src', 'split': 'train'}]}})
+        self.assertEqual(self.run_main(cfg), 1)
+        self.assertTrue(keep.exists())
+
+    def test_out_empty_or_cwd_refused(self):
+        cfg = self.cfg()
+        self.assertEqual(self.run_main(cfg, out=''), 1)
+        self.assertEqual(self.run_main(cfg, out='.'), 1)
+
+    def test_out_ancestor_of_root_refused(self):
+        cfg = self.cfg()
+        self.assertEqual(self.run_main(cfg, out=self.root.parent), 1)
 
 
 if __name__ == '__main__':

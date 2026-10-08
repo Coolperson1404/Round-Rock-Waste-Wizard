@@ -232,6 +232,38 @@ def _write_samples(samples, out, labels):
     return counts, unreadable, skipped
 
 
+def _source_dirs(config, root):
+    """Every directory the config reads from, including implicit own-photo dirs."""
+    dirs = []
+    if config.get('ownPhotos'):
+        dirs += [root / 'ml/data/own', root / 'ml/data/own-test']
+    for spec in config['classes'].values():
+        for src in spec.get('sources', []):
+            dirs.append(root / (src['path'] if src['type'] == 'folder' else src['images']))
+    return [d.resolve() for d in dirs]
+
+
+def _is_within(child, parent):
+    return child == parent or parent in child.parents
+
+
+def unsafe_out_reason(out_arg, root, config):
+    """Why --out must be refused (it is wiped and rewritten), or None if safe."""
+    if not str(out_arg).strip():
+        return '--out is empty'
+    out, root = Path(out_arg).resolve(), Path(root).resolve()
+    if out == Path.cwd().resolve():
+        return f'--out {out} is the current directory'
+    if _is_within(root, out):
+        return f'--out {out} is the repo root or one of its ancestors'
+    for src in _source_dirs(config, root):
+        if _is_within(out, src):
+            return f'--out {out} is inside the source folder {src}'
+        if _is_within(src, out):
+            return f'--out {out} contains the source folder {src}'
+    return None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--config', required=True)
@@ -262,6 +294,12 @@ def main(argv=None):
         for label, c in planned.items():
             print(f'  {label}: train {c["train"]}, test {c["test"]}')
         return 0
+
+    reason = unsafe_out_reason(args.out, root, config)
+    if reason:
+        print(f'refusing to use --out: {reason}. Nothing was deleted or written.',
+              file=sys.stderr)
+        return 1
 
     leaks = find_leaks(samples)
     if leaks:
