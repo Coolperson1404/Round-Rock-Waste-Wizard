@@ -6,8 +6,10 @@ objects in real kitchens matter most, and 12 of the 42 classes have no public da
 ## Folder layout
 
 ```
-ml/data/own/<label>/        training photos
-ml/data/own-test/<label>/   test photos (held out; never used for training)
+ml/data/own/<label>/                 training photos
+ml/data/own-test/<label>/            test photos (held out; never used for training)
+ml/data/own-test-unlisted/<bin>/     test photos of items NOT in the list below (see
+                                     "Unlisted look-alikes")
 ```
 
 Create a folder named exactly like the label (the left column below). Folders you do not create
@@ -81,6 +83,39 @@ Test photos must show **different physical objects** from the training photos. A
 the same bottle you trained on tells you nothing; use another bottle. Exact duplicate files in
 both folders are rejected by the script (it exits with code 2).
 
+## Unlisted look-alikes (test only)
+
+The item model only knows the 42 labels above. Shown something else, it does not say "I don't
+know": it picks the nearest label, often confidently. A paint can comes out as a food can and goes
+to the recycling cart. These photos measure how often that happens.
+
+```
+ml/data/own-test-unlisted/<bin>/
+```
+
+`<bin>` is where the item really goes, using the app's bin ids: `recycle`, `trash`, `center`,
+`hhw`, `brush`, `bulk` or `other`. Any other folder name is an error.
+
+Good examples are items that look like a listed item but go somewhere else:
+
+| Item | Folder |
+|---|---|
+| Motor-oil bottle | `hhw` |
+| Spray-paint can | `hhw` |
+| Sharps container | `hhw` |
+| Pill bottle | `hhw` |
+| Propane canister | `hhw` |
+| Mercury thermometer | `hhw` |
+| Plastic toy | `trash` |
+| Ceramic mug | `trash` |
+
+Take **5 to 10 photos for each bin you can cover**. `hhw` matters most: a hazardous item answered
+into another bin fails the ship gate.
+
+These photos are copied to `test/unlisted__<bin>/` and are **never used for training**. The
+report scores them by bin only. They count toward bin accuracy, the wrong-bin rate and hazardous
+misses, but not toward item accuracy or coverage. It also lists them separately as the open set.
+
 ## Getting photos onto the Mac
 
 AirDrop them from the iPhone and drop them into the right folder. HEIC files are fine; the script
@@ -98,14 +133,29 @@ converts them. JPEG, PNG and WebP also work.
 python3 ml/prepare_data.py --config ml/sources.json --out ml/build/items
 ```
 
-This command needs the TACO dataset to be downloaded into `ml/data/taco/` first (the workflow
-downloads TACO before photo collection). Until `ml/data/taco/data/annotations.json` exists it
-stops with exit code 1 and an error like:
+It prints the train/test counts for each class and flags the ones still short (`<-- short`).
+The same counts are written to `ml/build/items/summary.json`.
+
+You can run it before the TACO dataset is in `ml/data/taco/`. Until
+`ml/data/taco/data/annotations.json` exists, it prints a warning and counts only your own photos
+and the local datasets:
 
 ```
-config error: cardboard_box: COCO annotations not found: .../ml/data/taco/data/annotations.json
+warning: COCO annotations not found: .../ml/data/taco/data/annotations.json. ...
 ```
 
-Once TACO is in place, it prints the train/test counts for each class and flags the ones still short (`<-- short`).
-Add `--check` to only validate the config, or `--drop-underfilled` to leave short classes out of
-the build. The same counts are written to `ml/build/items/summary.json`.
+`--check` only validates the config and writes nothing. It is strict: a missing annotations file
+is an error there (exit code 1). An unknown TACO category name is always an error.
+
+`--drop-underfilled` leaves short classes out of **training** only. Their test photos stay in the
+test set, so the report shows what the model does with an item it was never taught. The
+`dropped` list in `summary.json` names them. It refuses to drop a short `hhw` or `center` class
+unless you also pass `--allow-drop-hazard`. Dropping one means the app cannot recognise that
+hazardous or drop-off item, so the better fix is more photos.
+
+Each class uses at most 500 training images (`maxTrain` in `ml/sources.json`), picked the same
+way on every run.
+
+Each run replaces `train/` and `test/` in the output folder. It only does so when the folder holds
+a `summary.json` from an earlier run, or when `train/` and `test/` are empty or missing. Otherwise
+it stops and deletes nothing.

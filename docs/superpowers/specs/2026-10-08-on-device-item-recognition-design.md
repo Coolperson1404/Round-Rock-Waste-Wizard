@@ -57,12 +57,19 @@ same way the material model runs today.
 | TACO litter dataset (COCO-format boxes, cropped to one item per image) | Most packaging classes |
 | **Your own iPhone photos** in `ml/data/own/<label>/` | Every class. This is the only source for 12 classes (e.g. milk jug, K-cup, foil tin, paint can, light bulbs, `not_waste`) |
 | **Your own iPhone photos** in `ml/data/own-test/<label>/` | **The item test set.** It is never trained on, and shows different physical objects from the training photos |
+| **Your own iPhone photos** in `ml/data/own-test-unlisted/<bin>/` | **The open-set test.** Items outside the taxonomy that look like listed items, filed by their real bin (e.g. a motor-oil bottle under `hhw`). Test only, never trained on |
 
 Downloading public datasets needs your explicit OK each time.
 
 **Minimums per class:** 40 training images and 10 test images. A class that
-falls short is left out of the build and does not ship. It keeps working
-through the existing fallbacks.
+falls short can be left out of training (`--drop-underfilled`), but that does
+not make it safe. The item model is a closed-set classifier: shown an item it
+was not trained on, it answers with the nearest look-alike, often confidently,
+and the existing fallbacks never run. So a dropped class's test photos stay in
+the test set and count in every metric. The unlisted look-alikes are measured
+there too. Dropping a short `hhw` or `center` class needs explicit consent
+(`--allow-drop-hazard`); without it the build refuses. Each class's training
+set is capped at 500 images (`maxTrain`), chosen deterministically.
 
 Realistic photo cost for v1 is about **900 phone photos**: 40 training photos
 for each of the 12 own-photo-only classes, plus 10 test photos for each of the
@@ -85,7 +92,12 @@ NEW  Item model                     answer, or ask with model candidates, or "no
   - Top item confidence ≥ `ITEM_ACCEPT` → **answer**.
   - Between `ITEM_SUGGEST` (0.35) and `ITEM_ACCEPT` → **ask**: the existing
     "Which one is it?" chooser, with the model's top 3 listed first.
-  - Top is `not_waste` at ≥ `ITEM_SUGGEST` → a retake hint.
+  - Top is `not_waste` at ≥ `ITEM_SUGGEST` → a retake hint. The chooser
+    still lists the model's top 3 item guesses first.
+  - **Hazard safety net:** an answer whose item is not `hhw` becomes an
+    ask (confidence clipped below `CONFIRM_BELOW`) when an `hhw` item is
+    among the top 3 at ≥ `ITEM_SUGGEST`. The hazardous item is one of the
+    candidates.
   - Anything else → no opinion, and the scan falls through.
 - **`ITEM_ACCEPT`** is not guessed. It is the smallest threshold at which,
   on the test set, at most **2 %** of asserted answers are in the wrong bin.
@@ -95,7 +107,10 @@ NEW  Item model                     answer, or ask with model candidates, or "no
   become a suggestion in the chooser rather than an assertion. This targets
   the confident-wrong-answer problem directly.
 - Corrections and visual memory (`deliverScanResult`) still run first on
-  every result. User fixes still win.
+  every result. User fixes still win. On the item-model path the correction
+  key is `itm:<top item>`. Like MobileNet's `cls:` key it is broad: taught
+  once, it overrides only when the pipeline is unsure (< 0.70) and is asked
+  about below `CONFIRM_BELOW`. Taught twice, it is used outright.
 
 ### 4. Measuring "smarter"
 
@@ -105,6 +120,13 @@ NEW  Item model                     answer, or ask with model candidates, or "no
 - bin accuracy
 - a threshold sweep showing coverage (the share of photos answered without
   asking) against the wrong-bin rate among answered photos
+- hazardous misses at the shipped threshold: `hhw` photos answered into
+  another bin at `ITEM_ACCEPT`. Drop-off (`center`) misses are reported
+  alongside, for information only.
+- the open set: how many unlisted look-alikes are answered at `ITEM_ACCEPT`,
+  and how many of those land in the wrong bin. Unlisted photos count toward
+  bin accuracy, the wrong-bin rate and hazardous misses. They do not count
+  toward item accuracy or coverage, which are about the known items.
 
 The same test photos are run through the **current** `WasteMaterial.mlmodel`
 as the baseline. A 20-photo device checklist is recorded before and after.
@@ -117,6 +139,7 @@ as the baseline. A 20-photo device checklist is recorded before and after.
 | Bin accuracy | ≥ 92 % |
 | Wrong bin among answered photos | ≤ 2 % (enforced by `ITEM_ACCEPT`) |
 | Coverage at `ITEM_ACCEPT` | ≥ 65 % |
+| Hazardous (`hhw`) photos answered into another bin at `ITEM_ACCEPT` | 0 |
 
 **Material model target:** ≥ 90 % top-1 on a hash-split 15 % holdout of the
 Garbage Dataset.
