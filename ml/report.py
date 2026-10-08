@@ -6,7 +6,8 @@ reports item/bin accuracy and hazardous misses, then sweeps confidence
 thresholds to find the lowest one whose wrong-bin rate is at or under the cap.
 
 Exit codes: 0 all targets met, 1 a target missed, 3 coverage required but no
-threshold meets the max wrong-bin rate.
+threshold meets the max wrong-bin rate, or the rate at the effective accept
+threshold exceeds it.
 """
 import argparse
 import json
@@ -100,10 +101,17 @@ def sweep(preds, truth_bins, pred_bins):
 
 
 def recommend_threshold(rows, max_wrong):
-    for row in rows:
-        if row['accepted'] >= 1 and row['wrong_bin_rate'] <= max_wrong:
-            return row['t']
-    return None
+    """Smallest grid t that is safe, where safe means the wrong-bin rate is at or
+    under the cap at t (with at least 1 accepted photo) and at every higher grid t
+    that accepts anything. The rate is not monotone in t, so first-fit would miss
+    a bad rate at a threshold above the one it picked."""
+    best = None
+    for row in reversed(rows):
+        if row['accepted'] >= 1 and row['wrong_bin_rate'] > max_wrong:
+            break
+        if row['accepted'] >= 1:
+            best = row['t']
+    return best
 
 
 def check_targets(report, require):
@@ -140,6 +148,7 @@ def _markdown(rep):
         f"- recommended threshold (wrong-bin <= {rep['max_wrong_bin']}): {rep['recommended']}",
         f"- effective accept (max with confirm-below {rep['confirm_below']}): {rep['effective_accept']}",
         f"- coverage at effective accept: {_fmt(rep['coverage_at_effective'])}",
+        f"- wrong-bin at effective accept: {_fmt(rep['wrong_bin_at_effective'])}",
         f"- targets: {rep['require'] or 'none'}; missed: {rep['missed'] or 'none'}",
         '',
         '| t | coverage | wrong-bin | item acc |',
@@ -174,11 +183,12 @@ def main(argv):
     rows = sweep(preds, truth_bins, pred_bins)
     recommended = recommend_threshold(rows, args.max_wrong_bin)
     effective = None if recommended is None else max(recommended, args.confirm_below)
-    coverage = None
+    coverage = wrong_at_effective = None
     if effective is not None:
         row = next((r for r in rows if r['t'] == effective), None)
         row = row or _row_at(preds, truth_bins, pred_bins, effective)
         coverage = row['coverage']
+        wrong_at_effective = row['wrong_bin_rate']
     rep.update({
         'sweep': rows,
         'max_wrong_bin': args.max_wrong_bin,
@@ -186,6 +196,7 @@ def main(argv):
         'recommended': recommended,
         'effective_accept': effective,
         'coverage_at_effective': coverage,
+        'wrong_bin_at_effective': wrong_at_effective,
         'require': args.require,
     })
     rep['missed'] = check_targets(rep, args.require)
@@ -193,7 +204,8 @@ def main(argv):
     Path(args.out).write_text(json.dumps(rep, indent=2))
     print(_markdown(rep))
 
-    if 'coverage' in args.require and recommended is None:
+    if 'coverage' in args.require and (
+            recommended is None or wrong_at_effective > args.max_wrong_bin):
         return 3
     return 1 if rep['missed'] else 0
 

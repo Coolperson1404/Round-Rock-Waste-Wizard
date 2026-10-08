@@ -123,6 +123,74 @@ class SweepTests(unittest.TestCase):
         rows = report.sweep(preds, BINS, BINS)
         self.assertEqual(report.recommend_threshold(rows, 0.02), 0.3)
 
+    def test_recommend_non_monotone_wrong_bin_rate(self):
+        # Wrong-bin photo at 0.35, correct photos over 0.40-0.59, wrong-bin at 0.9.
+        # Rate at t=0.30 is 2/102 <= 2 %, so the old first-fit rule said 0.30, but
+        # at t=0.60 and above the only accepted photo is the 0.9 miss (rate 1.0).
+        preds = [pred('aerosol_can', ('aluminum_can', 0.35))]
+        preds += [pred('paper', ('paper', 0.40 + 0.0019 * i)) for i in range(100)]
+        preds += [pred('aerosol_can', ('aluminum_can', 0.9))]
+        rows = report.sweep(preds, BINS, BINS)
+        by_t = {r['t']: r for r in rows}
+        self.assertLessEqual(by_t[0.3]['wrong_bin_rate'], 0.02)
+        self.assertEqual(by_t[0.9]['wrong_bin_rate'], 1.0)
+        self.assertIsNone(report.recommend_threshold(rows, 0.02))
+
+    def test_recommend_skips_unsafe_middle_threshold(self):
+        # 100 correct at 0.30-0.49, one miss at 0.50, one correct at 0.9.
+        # t=0.30 looks fine (1/102) but t=0.50 is 1/2; first t safe from there up is 0.55.
+        preds = [pred('paper', ('paper', 0.30 + 0.0019 * i)) for i in range(100)]
+        preds += [pred('aerosol_can', ('aluminum_can', 0.50))]
+        preds += [pred('paper', ('paper', 0.9))]
+        rows = report.sweep(preds, BINS, BINS)
+        by_t = {r['t']: r for r in rows}
+        self.assertLessEqual(by_t[0.3]['wrong_bin_rate'], 0.02)
+        self.assertEqual(by_t[0.5]['wrong_bin_rate'], 0.5)
+        self.assertEqual(report.recommend_threshold(rows, 0.02), 0.55)
+
+    def test_not_waste_truth_not_in_coverage_numerator(self):
+        # not_waste photo predicted paper at 0.9 is accepted and wrong, but is not
+        # real waste, so it adds nothing to coverage.
+        preds = [
+            pred('not_waste', ('paper', 0.9)),
+            pred('paper', ('paper', 0.9)),
+        ]
+        row = report.sweep(preds, BINS, BINS)[0]
+        self.assertEqual(row['t'], 0.3)
+        self.assertEqual(row['coverage'], 1.0)
+        self.assertEqual(row['wrong_bin_rate'], 0.5)
+        self.assertEqual(row['accepted'], 2)
+
+    def test_all_not_waste_truth_no_division_by_zero(self):
+        preds = [
+            pred('not_waste', ('paper', 0.9)),
+            pred('not_waste', ('not_waste', 0.9)),
+        ]
+        rows = report.sweep(preds, BINS, BINS)
+        for r in rows:
+            self.assertEqual(r['coverage'], 0.0)
+        self.assertEqual(rows[0]['wrong_bin_rate'], 1.0)
+        self.assertEqual(rows[0]['accepted'], 1)
+
+    def test_empty_predictions(self):
+        s = report.score([], BINS, BINS)
+        self.assertEqual(s['n'], 0)
+        self.assertIsNone(s['item_top1'])
+        self.assertIsNone(s['item_top3'])
+        self.assertEqual(s['bin_acc'], 0.0)
+        self.assertEqual(s['per_class'], {})
+        self.assertEqual(s['worst_classes'], [])
+        self.assertEqual(s['confusions'], [])
+        self.assertEqual(s['hazard_misses'], 0)
+        rows = report.sweep([], BINS, BINS)
+        self.assertEqual(len(rows), 14)
+        for r in rows:
+            self.assertEqual(r['coverage'], 0.0)
+            self.assertEqual(r['wrong_bin_rate'], 0.0)
+            self.assertEqual(r['item_acc'], 0.0)
+            self.assertEqual(r['accepted'], 0)
+        self.assertIsNone(report.recommend_threshold(rows, 0.02))
+
     def test_not_waste_never_accepted(self):
         preds = [pred('not_waste', ('not_waste', 0.99))]
         for r in report.sweep(preds, BINS, BINS):
@@ -187,10 +255,25 @@ class CliTests(unittest.TestCase):
         self.assertEqual(out['recommended'], 0.55)
         self.assertEqual(out['effective_accept'], 0.6)
         self.assertEqual(out['coverage_at_effective'], 0.5)
+        self.assertEqual(out['wrong_bin_at_effective'], 0.0)
+        self.assertIn('wrong-bin at effective accept', text)
         self.assertEqual(code, 0)
         self.assertIn('0.6', text)
         code, _, _ = self.run_cli(preds, ['--require', 'coverage=0.6'])
         self.assertEqual(code, 1)
+
+    def test_exit_3_when_wrong_bin_exceeds_cap_at_effective_accept(self):
+        # Safe on the grid (t=0.60 has 1/102, t=0.65 has 0/1) but --confirm-below 0.62
+        # lands off-grid where the 0.63 miss is 1 of 2 accepted photos.
+        preds = [pred('paper', ('paper', 0.605)) for _ in range(100)]
+        preds += [pred('aerosol_can', ('aluminum_can', 0.63)), pred('paper', ('paper', 0.9))]
+        code, out, _ = self.run_cli(preds, ['--confirm-below', '0.62', '--require', 'coverage=0.1'])
+        self.assertEqual(out['recommended'], 0.3)
+        self.assertEqual(out['effective_accept'], 0.62)
+        self.assertEqual(out['wrong_bin_at_effective'], 0.5)
+        self.assertEqual(code, 3)
+        code, _, _ = self.run_cli(preds, ['--confirm-below', '0.62'])
+        self.assertEqual(code, 0)
 
     def test_effective_accept_off_grid(self):
         preds = [pred('paper', ('paper', 0.9))]
