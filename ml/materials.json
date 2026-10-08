@@ -1,0 +1,109 @@
+{
+  "model": "WasteMaterials",
+  "ownPhotos": false,
+  "testPercent": 15,
+  "minTrain": 40,
+  "minTest": 10,
+  "classes": {
+    "battery": {
+      "bin": "hhw",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/battery",
+          "split": "hash"
+        }
+      ]
+    },
+    "biological": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/biological",
+          "split": "hash"
+        }
+      ]
+    },
+    "cardboard": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/cardboard",
+          "split": "hash"
+        }
+      ]
+    },
+    "clothes": {
+      "bin": "other",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/clothes",
+          "split": "hash"
+        }
+      ]
+    },
+    "glass": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/glass",
+          "split": "hash"
+        }
+      ]
+    },
+    "metal": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/metal",
+          "split": "hash"
+        }
+      ]
+    },
+    "paper": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/paper",
+          "split": "hash"
+        }
+      ]
+    },
+    "plastic": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/plastic",
+          "split": "hash"
+        }
+      ]
+    },
+    "shoes": {
+      "bin": "other",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/shoes",
+          "split": "hash"
+        }
+      ]
+    },
+    "trash": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/trash",
+          "split": "hash"
+        }
+      ]
+    }
+  }
+}

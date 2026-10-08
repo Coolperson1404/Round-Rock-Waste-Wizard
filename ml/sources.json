@@ -1,0 +1,514 @@
+{
+  "model": "WasteItems",
+  "ownPhotos": true,
+  "testPercent": 15,
+  "minTrain": 40,
+  "minTest": 10,
+  "classes": {
+    "cardboard_box": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/cardboard",
+          "split": "train"
+        },
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Corrugated carton"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "pizza_box": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Pizza box"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "egg_carton_cardboard": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Egg carton"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "egg_carton_foam": {
+      "bin": "center",
+      "sources": []
+    },
+    "paper_tube": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Toilet tube"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "paper": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/paper",
+          "split": "train"
+        },
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Normal paper",
+            "Magazine paper"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "paper_bag": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Paper bag"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "paper_plate": {
+      "bin": "trash",
+      "sources": []
+    },
+    "tissue": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Tissues"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "drink_carton": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Drink carton"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "paper_cup": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Paper cup"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "plastic_bottle": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Clear plastic bottle"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "milk_jug": {
+      "bin": "recycle",
+      "sources": []
+    },
+    "plastic_tub": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Spread tub"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "detergent_bottle": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Other plastic bottle"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "plastic_lid": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Plastic lid",
+            "Plastic bottle cap"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "plastic_bag": {
+      "bin": "other",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Single-use carrier bag",
+            "Polypropylene bag"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "plastic_film": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Plastic film"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "plastic_cup_cutlery": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Disposable plastic cup",
+            "Plastic utensils",
+            "Plastic straw"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "chip_bag": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Crisp packet",
+            "Other plastic wrapper"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "styrofoam_food": {
+      "bin": "center",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Foam cup",
+            "Foam food container"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "styrofoam_packaging": {
+      "bin": "center",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Styrofoam piece"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "glass_bottle": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Glass bottle"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "glass_jar": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Glass jar"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "broken_glass": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Broken glass"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "drinking_glass": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Glass cup"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "aluminum_can": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Drink can"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "food_can": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Food Can"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "aluminum_foil": {
+      "bin": "recycle",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Aluminium foil"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "foil_tin": {
+      "bin": "recycle",
+      "sources": []
+    },
+    "aerosol_can": {
+      "bin": "hhw",
+      "sources": [
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Aerosol"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "paint_can": {
+      "bin": "hhw",
+      "sources": []
+    },
+    "reusable_bottle": {
+      "bin": "center",
+      "sources": []
+    },
+    "battery": {
+      "bin": "hhw",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/battery",
+          "split": "train"
+        },
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Battery"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "light_bulb": {
+      "bin": "trash",
+      "sources": []
+    },
+    "fluorescent_bulb": {
+      "bin": "center",
+      "sources": []
+    },
+    "clothing": {
+      "bin": "other",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/clothes",
+          "split": "train"
+        },
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/shoes",
+          "split": "train"
+        },
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Shoe"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "food_scraps": {
+      "bin": "trash",
+      "sources": [
+        {
+          "type": "folder",
+          "path": "Garbage Dataset/standardized_384/biological",
+          "split": "train"
+        },
+        {
+          "type": "coco",
+          "annotations": "ml/data/taco/data/annotations.json",
+          "images": "ml/data/taco/data",
+          "categories": [
+            "Food waste"
+          ],
+          "split": "train"
+        }
+      ]
+    },
+    "kcup": {
+      "bin": "trash",
+      "sources": []
+    },
+    "cell_phone": {
+      "bin": "other",
+      "sources": []
+    },
+    "laptop": {
+      "bin": "other",
+      "sources": []
+    },
+    "not_waste": {
+      "bin": "none",
+      "sources": []
+    }
+  }
+}

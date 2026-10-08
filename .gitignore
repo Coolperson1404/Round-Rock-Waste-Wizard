@@ -35,3 +35,9 @@ Waste Wizard - Round Rock/Waste Wizard - Round Rock/group1-shard*.bin
 
 # Xcode user state
 **/xcuserdata/
+
+# On-device model pipeline: downloaded datasets and build outputs
+ml/data/
+ml/build/
+/waste-models.js
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/waste-models.js
