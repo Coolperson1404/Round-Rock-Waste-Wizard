@@ -1237,6 +1237,7 @@
   <!-- Machine Learning & Computer Vision Libraries (On-Device Inference) -->
   <script src="tf.min.js"></script>
   <script src="mobilenet.min.js"></script>
+  <script src="waste-models.js"></script>
 
   <script>
     /* Round Rock Waste Wizard — rules data.
@@ -2415,7 +2416,7 @@
         try {
           const res = await window.webkit.messageHandlers[NATIVE_VISION_CHANNEL]
             .postMessage({ image: dataUrl,
-                           ops: ops || ['barcode', 'text', 'classify', 'featureprint', 'material'] });
+                           ops: ops || ['barcode', 'text', 'classify', 'featureprint', 'material', 'item'] });
           if (!res) return null;
           // A per-op failure is reported here rather than thrown: image
           // classification is unavailable in the Simulator, and that must not
@@ -2424,6 +2425,7 @@
           return {
             barcodes: res.barcodes || [], text: res.text || [],
             classes: res.classes || [], materials: res.materials || [],
+            items: res.items || [],
             featureprint: res.featureprint || null,
             errors: res.errors || null
           };
@@ -3641,36 +3643,8 @@
        It still only sees material, never the specific item, so it ranks below
        the barcode, the printed label and visual memory — all of which identify
        the actual object. */
-    const MATERIAL_TO_ITEM = {
-      cardboard: { item: 'Cardboard box', name: 'Cardboard' },
-      glass:     { item: 'Glass bottle (wine, beer, liquor)', name: 'Glass' },
-      metal:     { item: 'Aluminum can', name: 'Metal' },
-      paper:     { item: 'Junk mail, letters, envelopes', name: 'Paper' },
-      plastic:   { item: 'Water or soda bottle', name: 'Plastic' },
-      trash:     { item: 'Plastic cutlery, straws, cups', name: 'Non-recyclable waste' }
-    };
-    /* Below this the material guess is not worth acting on; the chooser is
-       better than a confident-sounding wrong bin. */
-    const MATERIAL_MIN_CONFIDENCE = 0.60;
-
     function matchMaterialPrediction(materials) {
-      if (!materials || !materials.length) return null;
-      const top = materials[0];
-      if (!top || top.confidence < MATERIAL_MIN_CONFIDENCE) return null;
-      const mapped = MATERIAL_TO_ITEM[String(top.value).toLowerCase()];
-      if (!mapped) return null;
-      const item = ITEMS.find(i => i.n === mapped.item);
-      if (!item) return null;
-      return {
-        item: `${mapped.name} item`,
-        match: item.n,
-        cat: item.cat,
-        why: `Trained material classifier identified this as ${mapped.name.toLowerCase()}.`,
-        tip: null,
-        badge: `Material: ${mapped.name} (${Math.round(top.confidence * 100)}%)`,
-        badgeIcon: item.cat === 'recycle' ? 'recycle' : 'bolt',
-        confidence: top.confidence
-      };
+      return typeof WasteModels === 'undefined' ? null : WasteModels.interpretMaterials(materials, ITEMS);
     }
 
     /* ---------- visual memory ----------
@@ -3785,6 +3759,7 @@
         if (it && !out.some(x => x.n === it.n)) out.push(it);
       };
       push(bestItem);
+      (sig && sig.items || []).forEach(n => push(ITEMS.find(i => i.n === n)));
       (sig && sig.classes || []).forEach(cls => {
         const c = String(cls || '').toLowerCase();
         for (const key in IMAGENET_TO_ROUND_ROCK) {
@@ -4012,7 +3987,7 @@
       // Step 0: one native Vision pass (iOS app only) covering barcode, text
       // and classification at once. Everything downstream reads the cache, and
       // every step still works when this returns null.
-      _lastScanSignals = { barcode: null, textTokens: [], classes: [], featureprint: null };
+      _lastScanSignals = { barcode: null, textTokens: [], classes: [], featureprint: null, items: [] };
       // Kept so a low-confidence result can be escalated to the cloud without
       // re-encoding the photo.
       _lastScanDataUrl = dataUrl;
@@ -4121,6 +4096,36 @@
         } catch (e) {
           console.warn('Cloud AI error, falling back to on-device engine:', e);
           // Fall back gracefully to on-device if cloud fails
+        }
+      }
+
+      // Step 2.5: the on-device item model (iOS only). It names the specific
+      // item, so it leads visual recognition; MobileNet below is capped to a
+      // suggestion whenever this ran. No-op in the browser and on Android.
+      const itemModelRan = typeof WasteModels !== 'undefined'
+        && WasteModels.itemModelRan(_nativeVisionForCurrentPhoto);
+      if (itemModelRan) {
+        const v = WasteModels.interpretItems(_nativeVisionForCurrentPhoto.items, ITEMS,
+          { confirmBelow: CONFIRM_BELOW });
+        _lastScanSignals.items = v ? v.candidates.map(i => i.n) : [];
+        if (v && v.kind === 'not_waste') {
+          showItemChooser({
+            title: 'Nothing to sort here?',
+            lead: 'I could not spot one item to throw away in that photo. Fill the frame with just that item and try again, or pick it below.',
+            candidates: buildCandidates(null, _lastScanSignals),
+            signals: _lastScanSignals
+          });
+          return;
+        }
+        if (v && (v.kind === 'answer' || v.kind === 'ask')) {
+          await deliverScanResult({ n: v.item.n, cat: v.item.cat, note: v.item.note || '' }, {
+            why: v.why,
+            confidence: v.confidence,
+            badge: v.badge,
+            badgeIcon: v.item.cat === 'recycle' ? 'recycle' : 'bolt',
+            badgeSub: 'On-device item model'
+          });
+          return;
         }
       }
 
@@ -4234,7 +4239,7 @@
               note: item && item.note ? item.note : (matched.tip || '')
             }, {
               why: matched.why,
-              confidence: matched.confidence,
+              confidence: itemModelRan ? Math.min(matched.confidence, CONFIRM_BELOW - 0.01) : matched.confidence,
               badge: matched.badge,
               badgeIcon: matched.badgeIcon,
               badgeSub: 'Multi-scale spatial vision analysis'

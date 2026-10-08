@@ -9,7 +9,7 @@ SWIFT="$ROOT/Waste Wizard - Round Rock/Waste Wizard - Round Rock"
 # tf.min.js / mobilenet.min.js / the model are loaded by relative path and must
 # sit flat beside index.html — Xcode flattens bundled resources, so a
 # subdirectory would break every path at runtime.
-ASSETS=(tf.min.js mobilenet.min.js mobilenet-model.json
+ASSETS=(tf.min.js mobilenet.min.js waste-models.js mobilenet-model.json
         group1-shard1of4.bin group1-shard2of4.bin
         group1-shard3of4.bin group1-shard4of4.bin)
 
