@@ -20,3 +20,18 @@ android/build/
 android/captures/
 ios/App/Pods/
 ios/App/DerivedData/
+
+# Bundled TF.js runtime + MobileNet weights.
+# www/ holds the tracked master copy; these are duplicates that
+# scripts/sync-targets.sh regenerates for the other build targets.
+/tf.min.js
+/mobilenet.min.js
+/mobilenet-model.json
+/group1-shard*.bin
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/tf.min.js
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/mobilenet.min.js
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/mobilenet-model.json
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/group1-shard*.bin
+
+# Xcode user state
+**/xcuserdata/
