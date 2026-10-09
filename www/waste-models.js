@@ -1,6 +1,8 @@
-/* Constants and pure decision logic shared by the on-device item/material
-   classifiers, the training pipeline's tests, and (later) the web app. The
-   runtime wiring arrives in a later task. */
+/* Constants and pure decision logic for the on-device item and material
+   classifiers. Loaded by www/index.html before its inline script (handlePhoto
+   and matchMaterialPrediction call it, always guarded by
+   typeof WasteModels !== 'undefined') and required by the Node tests in
+   ml/tests. Keep it free of DOM and app state. */
 (function (root) {
   'use strict';
 
@@ -73,21 +75,22 @@
      above ITEM_ACCEPT. ITEM_ACCEPT is a placeholder; a later task sets the real value. */
   const ITEM_SUGGEST = 0.35;
   const ITEM_ACCEPT = 0.60;
+  /* Hazard safety net. Confidences are softmax probabilities that sum to 1,
+     so a hazardous runner-up can never reach ITEM_SUGGEST while the top is
+     above ITEM_ACCEPT. A non-hhw answer is asked about instead whenever an hhw
+     item at rank 2 or 3 scores at least this much. ml/report.py applies the
+     same rule (its HAZARD_RUNNER_UP must equal this; a test checks it). */
+  const HAZARD_RUNNER_UP = 0.10;
 
   /* True only when the native item model actually returned predictions. */
   function itemModelRan(native) {
     return !!native && Array.isArray(native.items) && native.items.length > 0;
   }
 
-  /* Turn raw item-model predictions into an answer / ask / not_waste verdict,
-     or null when the model has no usable opinion. */
-  function interpretItems(predictions, items, opts) {
-    if (!Array.isArray(predictions) || !Array.isArray(items)) return null;
-    const o = opts || {};
-    const confirmBelow = o.confirmBelow !== undefined ? o.confirmBelow : 0.60;
-    const accept = o.accept !== undefined ? o.accept : ITEM_ACCEPT;
-    const suggest = o.suggest !== undefined ? o.suggest : ITEM_SUGGEST;
-
+  /* Usable predictions, best first: finite confidence, a known label, and
+     (unless it is not_waste) an ITEMS entry the app has. item is null for
+     not_waste. */
+  function rankPredictions(predictions, items) {
     const ranked = [];
     for (const p of predictions) {
       if (!p) continue;
@@ -104,52 +107,77 @@
       ranked.push({ label: label, item: item, confidence: confidence });
     }
     ranked.sort((a, b) => b.confidence - a.confidence);
+    return ranked;
+  }
 
+  /* The top 3 distinct mapped items of a ranked list, at any confidence. */
+  function candidatesOf(ranked) {
+    const out = [];
+    for (const r of ranked) {
+      if (!r.item || out.indexOf(r.item) !== -1) continue;
+      out.push(r.item);
+      if (out.length === 3) break;
+    }
+    return out;
+  }
+
+  /* The item model's guesses for the chooser: up to 3 distinct ITEMS entries
+     (never not_waste), top first, whatever the confidence and whatever
+     interpretItems decides. [] when there is nothing usable. */
+  function itemCandidates(predictions, items) {
+    if (!Array.isArray(predictions) || !Array.isArray(items)) return [];
+    return candidatesOf(rankPredictions(predictions, items));
+  }
+
+  /* Turn raw item-model predictions into an answer / ask / not_waste verdict,
+     or null when the model has no usable opinion. An answer or ask carries
+     `hazard`: the hhw item at rank 2 or 3 that scored at least
+     hazardRunnerUp while the top item is not hhw (null otherwise). When it
+     is set the verdict is always an ask. */
+  function interpretItems(predictions, items, opts) {
+    if (!Array.isArray(predictions) || !Array.isArray(items)) return null;
+    const o = opts || {};
+    const confirmBelow = o.confirmBelow !== undefined ? o.confirmBelow : 0.60;
+    const accept = o.accept !== undefined ? o.accept : ITEM_ACCEPT;
+    const suggest = o.suggest !== undefined ? o.suggest : ITEM_SUGGEST;
+    const hazardRunnerUp = o.hazardRunnerUp !== undefined ? o.hazardRunnerUp : HAZARD_RUNNER_UP;
+
+    const ranked = rankPredictions(predictions, items);
     if (!ranked.length || ranked[0].confidence < suggest) return null;
     const top = ranked[0];
-
-    /* The top 3 distinct mapped items, at any confidence. */
-    const candidates = [];
-    for (const r of ranked) {
-      if (!r.item || candidates.indexOf(r.item) !== -1) continue;
-      candidates.push(r.item);
-      if (candidates.length === 3) break;
-    }
+    const candidates = candidatesOf(ranked);
 
     if (top.label === NOT_WASTE) {
       /* The item guesses still lead the "nothing here?" chooser. */
       return {
         kind: 'not_waste', item: null, confidence: top.confidence, candidates: candidates,
+        hazard: null,
         why: 'On-device item model does not see a waste item here.',
         badge: 'Item model: not waste (' + Math.round(top.confidence * 100) + '%)'
       };
     }
 
-    const effectiveAccept = Math.max(accept, confirmBelow);
-    let isAnswer = top.confidence >= effectiveAccept;
-    if (isAnswer && top.item.cat !== 'hhw') {
-      /* Safety net: a closed-set model can be confidently wrong about a
-         hazardous item. If a hazardous item is a plausible runner-up, ask
-         instead of sending it to the cart. */
-      const hazard = ranked.slice(1, 3).find(r =>
-        r.item && r.item.cat === 'hhw' && r.confidence >= suggest);
-      if (hazard) {
-        isAnswer = false;
-        if (candidates.indexOf(hazard.item) === -1) candidates.splice(candidates.length - 1, 1, hazard.item);
-      }
-    }
+    /* Safety net: a closed-set model can be confidently wrong about a
+       hazardous item. If a hazardous item is a plausible runner-up, ask
+       instead of sending it to the cart. It is always among the candidates. */
+    const runnerUp = top.item.cat === 'hhw' ? null : ranked.slice(1, 3).find(r =>
+      r.item && r.item.cat === 'hhw' && r.confidence >= hazardRunnerUp);
+    const hazard = runnerUp ? runnerUp.item : null;
+    const isAnswer = !hazard && top.confidence >= Math.max(accept, confirmBelow);
     const confidence = isAnswer ? top.confidence : Math.min(top.confidence, confirmBelow - 0.01);
     return {
       kind: isAnswer ? 'answer' : 'ask',
       item: top.item,
       confidence: confidence,
       candidates: candidates,
+      hazard: hazard,
       why: 'On-device item model recognised this as ' + top.item.n + '.',
       badge: 'Item model: ' + top.item.n + ' (' + Math.round(confidence * 100) + '%)'
     };
   }
 
-  /* Material-model fallback; mirrors matchMaterialPrediction in index.html. */
+  /* Material-model fallback. index.html's matchMaterialPrediction is a thin,
+     guarded wrapper around this. */
   function interpretMaterials(materials, items) {
     if (!Array.isArray(materials) || !materials.length || !Array.isArray(items)) return null;
     const top = materials[0];
@@ -177,7 +205,9 @@
     MATERIAL_MIN_CONFIDENCE: MATERIAL_MIN_CONFIDENCE,
     ITEM_SUGGEST: ITEM_SUGGEST,
     ITEM_ACCEPT: ITEM_ACCEPT,
+    HAZARD_RUNNER_UP: HAZARD_RUNNER_UP,
     itemModelRan: itemModelRan,
+    itemCandidates: itemCandidates,
     interpretItems: interpretItems,
     interpretMaterials: interpretMaterials
   };
