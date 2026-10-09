@@ -105,9 +105,11 @@ NEW  Item model                     answer, or ask with model candidates, or "no
     2 or 3 scores ≥ `HAZARD_RUNNER_UP` (0.10), the verdict is an ask
     (confidence clipped below `CONFIRM_BELOW`) and names that item as
     `hazard`. The hazardous item is always one of the candidates.
-    `ml/report.py` applies the same rule (its `HAZARD_RUNNER_UP` is tested
-    equal to the app's), so a photo the app would ask about is never counted
-    as answered.
+    `ml/report.py` applies the same rule when run with `--hazard-net` (its
+    `HAZARD_RUNNER_UP` is tested equal to the app's), so a photo the app
+    would ask about is not counted as answered. The net is opt-in and used
+    only for item-model runs: the material fallback has no such net, so
+    material and baseline reports are scored without it.
   - Anything else → no opinion, and the scan falls through.
 - **`ITEM_ACCEPT`** is not guessed. It is the smallest grid threshold at or
   above `CONFIRM_BELOW` (0.60) at which, on the test set, at least one photo
@@ -131,7 +133,9 @@ NEW  Item model                     answer, or ask with model candidates, or "no
   is `hhw` and the learned item is not, or when the result is a
   hazard-downgraded ask. The app asks instead ("Is this the same one
   again?"), listing the learned item, the incoming item and the hazardous
-  item. Specific keys (`bc:`, `txt:`) and visual memory are unchanged.
+  item. A hazardous incoming result always contributes a hazardous
+  candidate, even when it carries only a display name such as "Battery
+  item". Specific keys (`bc:`, `txt:`) and visual memory are unchanged.
 
 ### 4. Measuring "smarter"
 
