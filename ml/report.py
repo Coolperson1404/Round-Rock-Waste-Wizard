@@ -6,12 +6,15 @@ reports item/bin accuracy and hazardous misses, then sweeps confidence
 thresholds to find the lowest one, at or above --confirm-below, whose wrong-bin
 rate is at or under the cap.
 
-A photo counts as answered ("accepted") at t only as the app would answer it:
-the top confidence is >= t, the top label is not not_waste, and the hazard
-safety net does not fire. The net fires when the top label's bin is not hhw but
-a rank-2 or rank-3 label's bin (in the pred config) is hhw with confidence >=
---hazard-runner-up (HAZARD_RUNNER_UP, kept equal to the app's
-WasteModels.HAZARD_RUNNER_UP); the app then asks instead of answering.
+A photo counts as answered ("accepted") at t when the top confidence is >= t
+and the top label is not not_waste. With --hazard-net (item-model runs only) it
+must also not trip the app's item-model hazard safety net: the top label's bin
+is not hhw but a rank-2 or rank-3 label's bin (in the pred config) is hhw with
+confidence >= --hazard-runner-up (default HAZARD_RUNNER_UP, kept equal to the
+app's WasteModels.HAZARD_RUNNER_UP); the app then asks instead of answering.
+The net is off by default because the app's material fallback has no such net:
+scoring material or baseline predictions with it would hide real hazardous
+misses. Forgetting the flag only makes the gate stricter.
 
 Truth labels come from the test folder names. `unlisted__<bin>` (photos of items
 outside the taxonomy, see ml/PHOTO_GUIDE.md) has bin <bin> without a config entry:
@@ -126,17 +129,18 @@ def score(preds, truth_bins, pred_bins):
     }
 
 
-def hazard_fires(row, pred_bins, hazard_runner_up=HAZARD_RUNNER_UP):
-    """The app's hazard safety net: the top label is not hhw, but a rank-2 or
-    rank-3 label is hhw with confidence >= hazard_runner_up, so the app asks."""
+def hazard_fires(row, pred_bins, hazard_runner_up=None):
+    """The app's item-model hazard safety net: the top label is not hhw, but a
+    rank-2 or rank-3 label is hhw with confidence >= hazard_runner_up, so the app
+    asks. hazard_runner_up None means the net is off (never fires)."""
     tops = row.get('top') or []
-    if not tops or pred_bins.get(tops[0]['label']) == 'hhw':
+    if hazard_runner_up is None or not tops or pred_bins.get(tops[0]['label']) == 'hhw':
         return False
     return any(pred_bins.get(r['label']) == 'hhw' and r['confidence'] >= hazard_runner_up
                for r in tops[1:3])
 
 
-def _accepted(row, t, pred_bins, hazard_runner_up=HAZARD_RUNNER_UP):
+def _accepted(row, t, pred_bins, hazard_runner_up=None):
     """True when the app would answer this photo at threshold t."""
     top = _top(row)
     return (top['label'] is not None and top['label'] != NOT_WASTE and top['confidence'] >= t
@@ -147,7 +151,7 @@ def _is_known_waste(truth):
     return truth != NOT_WASTE and not is_unlisted(truth)
 
 
-def _row_at(preds, truth_bins, pred_bins, t, hazard_runner_up=HAZARD_RUNNER_UP):
+def _row_at(preds, truth_bins, pred_bins, t, hazard_runner_up=None):
     comparable = _item_comparable(truth_bins, pred_bins)
     # Coverage is about the known items: not_waste and unlisted photos are out of it.
     real = sum(1 for r in preds if _is_known_waste(r['truth']))
@@ -174,7 +178,7 @@ def _row_at(preds, truth_bins, pred_bins, t, hazard_runner_up=HAZARD_RUNNER_UP):
     }
 
 
-def misses_at(preds, truth_bins, pred_bins, t, bin_id, hazard_runner_up=HAZARD_RUNNER_UP):
+def misses_at(preds, truth_bins, pred_bins, t, bin_id, hazard_runner_up=None):
     """Photos accepted at t whose truth bin is bin_id but whose answer is another bin."""
     return sum(1 for r in preds
                if _accepted(r, t, pred_bins, hazard_runner_up)
@@ -182,7 +186,7 @@ def misses_at(preds, truth_bins, pred_bins, t, bin_id, hazard_runner_up=HAZARD_R
                and pred_bins.get(_top(r)['label']) != bin_id)
 
 
-def open_set_at(preds, truth_bins, pred_bins, t, hazard_runner_up=HAZARD_RUNNER_UP):
+def open_set_at(preds, truth_bins, pred_bins, t, hazard_runner_up=None):
     """Unlisted look-alikes: how many there are (hhw_n of them hazardous), how many
     are answered at t, and how many of those answers are in the wrong bin (counts,
     not rates)."""
@@ -198,7 +202,7 @@ def open_set_at(preds, truth_bins, pred_bins, t, hazard_runner_up=HAZARD_RUNNER_
             'accepted_at_effective': len(accepted), 'wrong_bin_at_effective': wrong}
 
 
-def sweep(preds, truth_bins, pred_bins, hazard_runner_up=HAZARD_RUNNER_UP):
+def sweep(preds, truth_bins, pred_bins, hazard_runner_up=None):
     return [_row_at(preds, truth_bins, pred_bins, t, hazard_runner_up) for t in THRESHOLDS]
 
 
@@ -257,7 +261,8 @@ def _markdown(rep):
         f"{_count(rep['open_set']['wrong_bin_at_effective'])} of those in the wrong bin",
         f"- recommended threshold (wrong-bin <= {rep['max_wrong_bin']}, "
         f"at or above confirm-below): {rep['recommended']}",
-        f"- hazard runner-up (ask when an hhw rank 2-3 guess scores >=): {rep['hazard_runner_up']}",
+        f"- hazard runner-up net (item model; ask when an hhw rank 2-3 guess scores >=): "
+        f"{rep['hazard_runner_up'] if rep['hazard_net'] else 'off'}",
         f"- effective accept (max with confirm-below {rep['confirm_below']}): {rep['effective_accept']}",
         f"- coverage at effective accept: {_fmt(rep['coverage_at_effective'])}",
         f"- wrong-bin at effective accept: {_fmt(rep['wrong_bin_at_effective'])}",
@@ -282,8 +287,12 @@ def main(argv):
     ap.add_argument('--pred-config')
     ap.add_argument('--max-wrong-bin', type=float, default=0.02)
     ap.add_argument('--confirm-below', type=float, default=0.60)
+    ap.add_argument('--hazard-net', action='store_true',
+                    help="apply the app's item-model hazard runner-up net (item-model "
+                         'predictions only; never for material or baseline runs)')
     ap.add_argument('--hazard-runner-up', type=float, default=HAZARD_RUNNER_UP,
-                    help='the app asks when an hhw rank-2/3 guess scores at least this')
+                    help='with --hazard-net, the app asks when an hhw rank-2/3 guess '
+                         'scores at least this')
     ap.add_argument('--require', type=_parse_require, default={})
     ap.add_argument('--allow-hazard-misses', action='store_true',
                     help='do not exit 3 on hazardous misses at the effective accept (warns)')
@@ -292,7 +301,7 @@ def main(argv):
                          'unlisted__hhw photos')
     ap.add_argument('--out', required=True)
     args = ap.parse_args(argv)
-    hr = args.hazard_runner_up
+    hr = args.hazard_runner_up if args.hazard_net else None
 
     preds = json.loads(Path(args.predictions).read_text())
     try:
@@ -320,6 +329,7 @@ def main(argv):
         'sweep': rows,
         'max_wrong_bin': args.max_wrong_bin,
         'confirm_below': args.confirm_below,
+        'hazard_net': args.hazard_net,
         'hazard_runner_up': hr,
         'recommended': recommended,
         'effective_accept': effective,

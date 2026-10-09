@@ -23,6 +23,9 @@ TRUTH_CFG = {
     }
 }
 BINS = report.bins(TRUTH_CFG)
+# The hazard runner-up net is opt-in (--hazard-net); unit tests pass it explicitly.
+NET = report.HAZARD_RUNNER_UP
+MATERIALS_CFG = json.loads((Path(__file__).resolve().parent.parent / 'materials.json').read_text())
 
 
 def pred(truth, *tops, file='x.jpg'):
@@ -278,13 +281,13 @@ class HazardRunnerUpTests(unittest.TestCase):
 
     def test_hhw_runner_up_at_012_is_never_accepted(self):
         preds = [pred('aluminum_can', ('aluminum_can', 0.85), ('aerosol_can', 0.12))]
-        for r in report.sweep(preds, BINS, BINS):
+        for r in report.sweep(preds, BINS, BINS, NET):
             self.assertEqual(r['accepted'], 0, r['t'])
             self.assertEqual(r['coverage'], 0.0, r['t'])
 
     def test_hhw_runner_up_below_threshold_is_accepted(self):
         preds = [pred('aluminum_can', ('aluminum_can', 0.85), ('aerosol_can', 0.08))]
-        by_t = {r['t']: r for r in report.sweep(preds, BINS, BINS)}
+        by_t = {r['t']: r for r in report.sweep(preds, BINS, BINS, NET)}
         self.assertEqual(by_t[0.85]['accepted'], 1)
         self.assertEqual(by_t[0.9]['accepted'], 0)
 
@@ -293,12 +296,12 @@ class HazardRunnerUpTests(unittest.TestCase):
                       ('aerosol_can', 0.12))]
         rank4 = [pred('aluminum_can', ('aluminum_can', 0.62), ('food_can', 0.13),
                       ('paper', 0.12), ('aerosol_can', 0.11))]
-        self.assertEqual(report.sweep(rank3, BINS, BINS)[0]['accepted'], 0)
-        self.assertEqual(report.sweep(rank4, BINS, BINS)[0]['accepted'], 1)
+        self.assertEqual(report.sweep(rank3, BINS, BINS, NET)[0]['accepted'], 0)
+        self.assertEqual(report.sweep(rank4, BINS, BINS, NET)[0]['accepted'], 1)
 
     def test_hhw_top_is_not_downgraded(self):
         preds = [pred('aerosol_can', ('aerosol_can', 0.80), ('aluminum_can', 0.15))]
-        self.assertEqual(report.sweep(preds, BINS, BINS)[0]['accepted'], 1)
+        self.assertEqual(report.sweep(preds, BINS, BINS, NET)[0]['accepted'], 1)
 
     def test_threshold_is_a_parameter(self):
         preds = [pred('aluminum_can', ('aluminum_can', 0.85), ('aerosol_can', 0.08))]
@@ -308,12 +311,22 @@ class HazardRunnerUpTests(unittest.TestCase):
         # Baseline material labels: 'battery' is hhw in the pred config only.
         pred_bins = {'metal': 'recycle', 'battery': 'hhw'}
         preds = [pred('aluminum_can', ('metal', 0.85), ('battery', 0.12))]
-        self.assertEqual(report.sweep(preds, BINS, pred_bins)[0]['accepted'], 0)
+        self.assertEqual(report.sweep(preds, BINS, pred_bins, NET)[0]['accepted'], 0)
+        # Off by default: the material model has no such net in the app.
+        self.assertEqual(report.sweep(preds, BINS, pred_bins)[0]['accepted'], 1)
+
+    def test_net_is_off_by_default(self):
+        preds = [pred('aluminum_can', ('aluminum_can', 0.85), ('aerosol_can', 0.12))]
+        self.assertEqual(report.sweep(preds, BINS, BINS)[0]['accepted'], 1)
+        self.assertEqual(report.sweep(preds, BINS, BINS, None)[0]['accepted'], 1)
+        self.assertFalse(report.hazard_fires(preds[0], BINS))
+        self.assertTrue(report.hazard_fires(preds[0], BINS, NET))
 
     def test_hazard_ask_is_not_a_hazard_miss(self):
         # The app asks, so a hazardous photo that is top-1 wrong is not answered.
         preds = [pred('aerosol_can', ('aluminum_can', 0.85), ('aerosol_can', 0.12))]
-        self.assertEqual(report.misses_at(preds, BINS, BINS, 0.6, 'hhw'), 0)
+        self.assertEqual(report.misses_at(preds, BINS, BINS, 0.6, 'hhw', NET), 0)
+        self.assertEqual(report.misses_at(preds, BINS, BINS, 0.6, 'hhw'), 1)
         self.assertEqual(report.score(preds, BINS, BINS)['hazard_misses'], 1)
 
 
@@ -332,11 +345,11 @@ class TargetTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
-    def run_cli(self, preds, extra):
+    def run_cli(self, preds, extra, cfg=TRUTH_CFG):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             (d / 'p.json').write_text(json.dumps(preds))
-            (d / 'c.json').write_text(json.dumps(TRUTH_CFG))
+            (d / 'c.json').write_text(json.dumps(cfg))
             argv = ['--predictions', str(d / 'p.json'), '--truth-config', str(d / 'c.json'),
                     '--out', str(d / 'out.json')] + extra
             buf, err = io.StringIO(), io.StringIO()
@@ -466,6 +479,36 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn('WARNING', self.stderr)
         self.assertIn('2 hazardous', self.stderr)
+
+    def test_material_model_hazard_miss_is_not_hidden_by_default(self):
+        # Reviewer repro: the app's material fallback has no runner-up net, so a
+        # battery predicted metal 0.85 / battery 0.12 is answered "Metal item" ->
+        # recycle. Without --hazard-net the report must see that miss.
+        preds = [pred('battery', ('metal', 0.85), ('battery', 0.12), file='b.jpg')]
+        preds += [pred('metal', ('metal', 0.9), file=f'm{i}.jpg') for i in range(60)]
+        code, out, text = self.run_cli(preds, ['--require', 'item=0.90'], cfg=MATERIALS_CFG)
+        self.assertEqual(out['hazard_misses_at_effective'], 1)
+        self.assertFalse(out['hazard_net'])
+        self.assertEqual(code, 3)
+        code, out, text = self.run_cli(preds, ['--require', 'item=0.90', '--hazard-net'],
+                                       cfg=MATERIALS_CFG)
+        self.assertEqual(out['hazard_misses_at_effective'], 0)
+        self.assertTrue(out['hazard_net'])
+        self.assertEqual(out['hazard_runner_up'], 0.10)
+        self.assertEqual(out['sweep'][0]['accepted'], 60)
+        self.assertEqual(code, 0)
+
+    def test_hazard_runner_up_value_applies_only_with_the_net(self):
+        preds = [pred('aerosol_can', ('aluminum_can', 0.85), ('aerosol_can', 0.08))]
+        preds += [pred('paper', ('paper', 0.95), file=f'p{i}.jpg') for i in range(60)]
+        code, out, _ = self.run_cli(preds, ['--hazard-runner-up', '0.05'])
+        self.assertIsNone(out['hazard_runner_up'])
+        self.assertEqual(out['hazard_misses_at_effective'], 1)
+        self.assertEqual(code, 3)
+        code, out, _ = self.run_cli(preds, ['--hazard-net', '--hazard-runner-up', '0.05'])
+        self.assertEqual(out['hazard_runner_up'], 0.05)
+        self.assertEqual(out['hazard_misses_at_effective'], 0)
+        self.assertEqual(code, 0)
 
     def test_hazard_gate_skipped_without_effective_accept(self):
         code, out, _ = self.run_cli(self.NO_THRESHOLD, ['--require', 'item=0.4'])
