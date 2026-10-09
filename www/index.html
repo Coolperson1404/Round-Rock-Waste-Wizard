@@ -3662,6 +3662,25 @@
        item is not, and not when the item model asked because a hazardous item
        was a plausible runner-up (hazardItem). Specific keys (bc:, txt:) are
        this exact item and always may. */
+    /* The ITEMS entry behind an incoming scan result, for the chooser. Results
+       often carry a display name ("Battery item", "Battery / cylindrical
+       item"), so try the exact name, then the ITEMS name the step matched
+       (extra.match), then a search hit in the same bin (search() fuzzy-matches
+       and honours the list's category filter), then any entry in the bin. A
+       hazardous result always resolves to a hazardous entry. */
+    function resolveIncomingItem(it, extra) {
+      const match = extra && extra.match;
+      const sameBinHit = () => {
+        const hit = (search(it.n) || [])[0];
+        return hit && hit.cat === it.cat ? hit : null;
+      };
+      const byCat = () => ITEMS.find(i => i.cat === it.cat) || null;
+      const r = ITEMS.find(i => i.n === it.n)
+        || (match ? ITEMS.find(i => i.n === match) : null)
+        || sameBinHit() || byCat();
+      return it.cat === 'hhw' && (!r || r.cat !== 'hhw') ? (byCat() || r) : r;
+    }
+
     function learnedMayAssert(learned, incomingCat, hazardItem) {
       if (!learned || !learned.item) return false;
       if (!isBroadKey(learned.key)) return true;
@@ -3950,7 +3969,7 @@
       // saw and the hazardous item.
       const hazardItem = extra && extra.hazardItem ? extra.hazardItem : null;
       if (learned && !learnedMayAssert(learned, it.cat, extra && extra.hazardItem)) {
-        const incoming = ITEMS.find(i => i.n === it.n) || search(it.n)[0];
+        const incoming = resolveIncomingItem(it, extra);
         const cands = [];
         [learned.item, incoming, hazardItem].concat(buildCandidates(learned.item, sig))
           .forEach(c => { if (c && cands.length < 4 && !cands.some(x => x.n === c.n)) cands.push(c); });
@@ -4329,6 +4348,7 @@
             }, {
               why: matched.why,
               confidence: itemModelRan ? Math.min(matched.confidence, CONFIRM_BELOW - 0.01) : matched.confidence,
+              match: item ? item.n : matched.match,
               badge: matched.badge,
               badgeIcon: matched.badgeIcon,
               badgeSub: 'Multi-scale spatial vision analysis'
@@ -4354,6 +4374,7 @@
             // Like MobileNet: only a suggestion when the item model ran.
             confidence: itemModelRan ? Math.min(mat.confidence, CONFIRM_BELOW - 0.01) : mat.confidence,
             badge: mat.badge, badgeIcon: mat.badgeIcon,
+            match: mat.match,
             badgeSub: 'On-device material model'
           });
           return;

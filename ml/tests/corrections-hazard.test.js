@@ -82,7 +82,65 @@ test('deliverScanResult gates learned answers on learnedMayAssert and offers all
   const src = extractSource('async function deliverScanResult(', HTML);
   assert.match(src, /learnedMayAssert\(learned, it\.cat, extra && extra\.hazardItem\)/);
   // The chooser lists the learned item, the incoming item and the hazardous item.
+  assert.match(src, /const incoming = resolveIncomingItem\(it, extra\)/);
   assert.match(src, /\[learned\.item, incoming, hazardItem\]/);
+});
+
+/* resolveIncomingItem, with search() stubbed: `hits` is what search returns. */
+function loadResolve(hits) {
+  const calls = [];
+  const search = q => { calls.push(q); return hits || []; };
+  // eslint-disable-next-line no-new-func
+  const fn = new Function('ITEMS', 'search',
+    extractSource('function resolveIncomingItem(', HTML) + '\nreturn resolveIncomingItem;')(ITEMS, search);
+  return { fn, calls };
+}
+const BATTERY = item('Alkaline battery (AA, AAA, 9V)');
+
+test('resolveIncomingItem: an exact ITEMS name wins', () => {
+  const { fn, calls } = loadResolve();
+  assert.strictEqual(fn({ n: 'Aluminum can', cat: 'recycle' }, null), CAN);
+  assert.deepStrictEqual(calls, []);
+});
+
+test('resolveIncomingItem: a display name resolves through extra.match', () => {
+  const { fn } = loadResolve([CAN]);
+  assert.strictEqual(fn({ n: 'Battery item', cat: 'hhw' }, { match: 'Alkaline battery (AA, AAA, 9V)' }), BATTERY);
+});
+
+test('resolveIncomingItem: MobileNet display names with a match', () => {
+  const { fn } = loadResolve();
+  for (const n of ['Small metal cylinder / battery', 'Battery / cylindrical item',
+    'Battery (AA, AAA, 9V, Alkaline)']) {
+    assert.strictEqual(fn({ n, cat: 'hhw' }, { match: BATTERY.n }), BATTERY, n);
+  }
+});
+
+test('resolveIncomingItem: an unknown hhw name with no match falls back to an hhw entry', () => {
+  const { fn } = loadResolve([]);
+  const r = fn({ n: 'Mystery cylinder', cat: 'hhw' }, {});
+  assert.ok(r);
+  assert.strictEqual(r.cat, 'hhw');
+});
+
+test('resolveIncomingItem: a search hit in another bin does not stand in for an hhw result', () => {
+  // search() honours the leftover category filter and fuzzy-matches; a recycle
+  // hit must not replace the hazardous incoming item.
+  const { fn } = loadResolve([CAN]);
+  const r = fn({ n: 'Battery / cylindrical item', cat: 'hhw' }, null);
+  assert.strictEqual(r.cat, 'hhw');
+});
+
+test('resolveIncomingItem: a same-bin search hit is used', () => {
+  const { fn } = loadResolve([CAN]);
+  assert.strictEqual(fn({ n: 'Metal item', cat: 'recycle' }, null), CAN);
+});
+
+test('the material and MobileNet branches pass their ITEMS match through extra', () => {
+  const start = HTML.indexOf('async function handlePhoto(');
+  const src = HTML.slice(start, HTML.indexOf('/* ================= schedule', start));
+  assert.match(src, /match: mat\.match/);
+  assert.match(src, /match: item \? item\.n : matched\.match/);
 });
 
 test('the item step passes the hazardous runner-up to deliverScanResult', () => {
