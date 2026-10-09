@@ -110,7 +110,8 @@ Good examples are items that look like a listed item but go somewhere else:
 | Ceramic mug | `trash` |
 
 Take **5 to 10 photos for each bin you can cover**. `hhw` matters most: a hazardous item answered
-into another bin fails the ship gate.
+into another bin fails the ship gate. **At least 5 `hhw` look-alikes are required**: with fewer,
+the report refuses to pass the coverage target (exit code 1) and says how many it found.
 
 These photos are copied to `test/unlisted__<bin>/` and are **never used for training**. The
 report scores them by bin only. They count toward bin accuracy, the wrong-bin rate and hazardous
@@ -147,14 +148,18 @@ warning: COCO annotations not found: .../ml/data/taco/data/annotations.json. ...
 `--check` only validates the config and writes nothing. It is strict: a missing annotations file
 is an error there (exit code 1). An unknown TACO category name is always an error.
 
-`--drop-underfilled` leaves short classes out of **training** only. Their test photos stay in the
-test set, so the report shows what the model does with an item it was never taught. The
-`dropped` list in `summary.json` names them. It refuses to drop a short `hhw` or `center` class
-unless you also pass `--allow-drop-hazard`. Dropping one means the app cannot recognise that
-hazardous or drop-off item, so the better fix is more photos.
+`--drop-underfilled` leaves classes that are short of **training** photos (under 40) out of
+training. Their test photos stay in the test set, so the report shows what the model does with an
+item it was never taught. The `dropped` list in `summary.json` names them. A class that has
+enough training photos but too few test photos is never dropped: it keeps its training data and
+is listed as `undermeasured` (add test photos so it is measured properly). `underfilled` lists
+both kinds. It refuses to drop a train-short `hhw` or `center` class unless you also pass
+`--allow-drop-hazard`. Dropping one means the app cannot recognise that hazardous or drop-off
+item, so the better fix is more photos.
 
-Each class uses at most 500 training images (`maxTrain` in `ml/sources.json`), picked the same
-way on every run.
+Each class uses at most 500 training images (`maxTrain` in `ml/sources.json`). **Your own photos
+are always kept**; the rest of the 500 comes from the public datasets, picked the same way on
+every run. The `capped` entry in `summary.json` says how many images each capped class lost.
 
 Each run replaces `train/` and `test/` in the output folder. It only does so when the folder holds
 a `summary.json` from an earlier run, or when `train/` and `test/` are empty or missing. Otherwise

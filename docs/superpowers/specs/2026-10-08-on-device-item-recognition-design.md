@@ -61,15 +61,20 @@ same way the material model runs today.
 
 Downloading public datasets needs your explicit OK each time.
 
-**Minimums per class:** 40 training images and 10 test images. A class that
-falls short can be left out of training (`--drop-underfilled`), but that does
-not make it safe. The item model is a closed-set classifier: shown an item it
-was not trained on, it answers with the nearest look-alike, often confidently,
-and the existing fallbacks never run. So a dropped class's test photos stay in
-the test set and count in every metric. The unlisted look-alikes are measured
-there too. Dropping a short `hhw` or `center` class needs explicit consent
-(`--allow-drop-hazard`); without it the build refuses. Each class's training
-set is capped at 500 images (`maxTrain`), chosen deterministically.
+**Minimums per class:** 40 training images and 10 test images. A class short
+of *training* photos can be left out of training (`--drop-underfilled`), but
+that does not make it safe. The item model is a closed-set classifier: shown an
+item it was not trained on, it answers with the nearest look-alike, often
+confidently, and the existing fallbacks never run. So a dropped class's test
+photos stay in the test set and count in every metric. The unlisted look-alikes
+are measured there too. A class short only of *test* photos is never dropped:
+it keeps its training data and is listed as `undermeasured` in `summary.json`
+(`underfilled` lists both kinds). Dropping a train-short `hhw` or `center`
+class needs explicit consent (`--allow-drop-hazard`); without it the build
+refuses. Each class's training set is capped at 500 images (`maxTrain`). Your
+own photos (`ml/data/own/<label>/`) are always kept; the rest of the cap is
+filled from the other sources, chosen deterministically by SHA-1, and
+`summary.json` lists the classes that were capped (`capped`).
 
 Realistic photo cost for v1 is about **900 phone photos**: 40 training photos
 for each of the 12 own-photo-only classes, plus 10 test photos for each of the
@@ -94,23 +99,39 @@ NEW  Item model                     answer, or ask with model candidates, or "no
     "Which one is it?" chooser, with the model's top 3 listed first.
   - Top is `not_waste` at ≥ `ITEM_SUGGEST` → a retake hint. The chooser
     still lists the model's top 3 item guesses first.
-  - **Hazard safety net:** an answer whose item is not `hhw` becomes an
-    ask (confidence clipped below `CONFIRM_BELOW`) when an `hhw` item is
-    among the top 3 at ≥ `ITEM_SUGGEST`. The hazardous item is one of the
-    candidates.
+  - **Hazard safety net:** confidences are softmax probabilities that sum
+    to 1, so a hazardous runner-up can never reach `ITEM_SUGGEST` next to an
+    answer. Instead: when the top item is not `hhw` and an `hhw` item at rank
+    2 or 3 scores ≥ `HAZARD_RUNNER_UP` (0.10), the verdict is an ask
+    (confidence clipped below `CONFIRM_BELOW`) and names that item as
+    `hazard`. The hazardous item is always one of the candidates.
+    `ml/report.py` applies the same rule (its `HAZARD_RUNNER_UP` is tested
+    equal to the app's), so a photo the app would ask about is never counted
+    as answered.
   - Anything else → no opinion, and the scan falls through.
-- **`ITEM_ACCEPT`** is not guessed. It is the smallest threshold at which,
-  on the test set, at most **2 %** of asserted answers are in the wrong bin.
-  It is then clamped to at least `CONFIRM_BELOW` (0.60), so the app's
-  existing ask-below-0.60 logic stays consistent.
+- **`ITEM_ACCEPT`** is not guessed. It is the smallest grid threshold at or
+  above `CONFIRM_BELOW` (0.60) at which, on the test set, at least one photo
+  is answered and at most **2 %** of answered photos are in the wrong bin. The
+  app ships exactly that threshold, so the rate there is what users see; a
+  worse rate at a higher, unshipped threshold does not block it.
 - When the item model ran on iOS, MobileNet answers are capped to 0.59. They
   become a suggestion in the chooser rather than an assertion. This targets
   the confident-wrong-answer problem directly.
+- The chooser candidates and the correction key are separate signals. The
+  chooser always gets the item model's top 3 guesses when it ran, whatever
+  the verdict. The correction key is `itm:<top item>`, set only when the
+  verdict is answer or ask (never for `not_waste` or no opinion).
+- When the item model ran, the material-model fallback is capped to 0.59 as
+  well, like MobileNet.
 - Corrections and visual memory (`deliverScanResult`) still run first on
-  every result. User fixes still win. On the item-model path the correction
-  key is `itm:<top item>`. Like MobileNet's `cls:` key it is broad: taught
-  once, it overrides only when the pipeline is unsure (< 0.70) and is asked
-  about below `CONFIRM_BELOW`. Taught twice, it is used outright.
+  every result. User fixes still win. Like MobileNet's `cls:` key, `itm:` is
+  broad: taught once, it overrides only when the pipeline is unsure (< 0.70)
+  and is asked about below `CONFIRM_BELOW`. Taught twice, it is used outright,
+  with one exception: a broad key is never asserted when the incoming result
+  is `hhw` and the learned item is not, or when the result is a
+  hazard-downgraded ask. The app asks instead ("Is this the same one
+  again?"), listing the learned item, the incoming item and the hazardous
+  item. Specific keys (`bc:`, `txt:`) and visual memory are unchanged.
 
 ### 4. Measuring "smarter"
 
@@ -121,12 +142,17 @@ NEW  Item model                     answer, or ask with model candidates, or "no
 - a threshold sweep showing coverage (the share of photos answered without
   asking) against the wrong-bin rate among answered photos
 - hazardous misses at the shipped threshold: `hhw` photos answered into
-  another bin at `ITEM_ACCEPT`. Drop-off (`center`) misses are reported
-  alongside, for information only.
+  another bin at `ITEM_ACCEPT`. This gate runs whenever `ITEM_ACCEPT` can be
+  computed: any miss exits 3 unless `--allow-hazard-misses` is passed, which
+  prints a loud warning. Drop-off (`center`) misses are reported alongside,
+  for information only.
 - the open set: how many unlisted look-alikes are answered at `ITEM_ACCEPT`,
   and how many of those land in the wrong bin. Unlisted photos count toward
   bin accuracy, the wrong-bin rate and hazardous misses. They do not count
-  toward item accuracy or coverage, which are about the known items.
+  toward item accuracy or coverage, which are about the known items. When
+  coverage is a required target, at least **5** `unlisted__hhw` photos are
+  needed (the report records `open_set.hhw_n`); fewer exits 1 unless
+  `--allow-no-open-set` is passed.
 
 The same test photos are run through the **current** `WasteMaterial.mlmodel`
 as the baseline. A 20-photo device checklist is recorded before and after.
