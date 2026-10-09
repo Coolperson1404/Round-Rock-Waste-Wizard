@@ -7,9 +7,12 @@
 Output: <out>/{train,test}/<label>/<tag>_<stem>[_<annId>].jpg and <out>/summary.json.
 With ownPhotos, ml/data/own-test-unlisted/<bin>/ holds photos of items outside the
 taxonomy; they go to <out>/test/unlisted__<bin>/ and are never trained on.
---drop-underfilled removes only the *train* data of short classes; their test photos
-stay so the report measures the blind spot. It refuses hhw/center classes unless
---allow-drop-hazard is given.
+--drop-underfilled removes only the *train* data of classes short of train photos
+(< minTrain); their test photos stay so the report measures the blind spot. Classes
+short only of test photos keep their train data and are listed as `undermeasured`.
+It refuses to drop train-short hhw/center classes unless --allow-drop-hazard is given.
+maxTrain caps each class's train samples but never removes your own photos
+(ml/data/own/<label>); summary.json lists `capped: {label: removed}`.
 Exit codes: 0 ok, 1 config error or refusal, 2 train/test leakage (identical file bytes).
 Dependencies: stdlib + Pillow. HEIC is converted with macOS `sips`.
 """
@@ -195,21 +198,37 @@ def _cap_key(sample, root):
     return hashlib.sha1(key.encode('utf-8')).hexdigest(), key
 
 
-def _cap_train(samples, cap, root):
-    """Keep at most `cap` train samples per class: the first by SHA-1 of the source path."""
+OWN_TRAIN_DIR = 'ml/data/own'
+
+
+def _is_own(sample, root):
+    return _rel(sample.src, root).startswith(OWN_TRAIN_DIR + '/')
+
+
+def _cap_train(samples, cap, root, capped=None):
+    """Keep at most `cap` train samples per class. Your own photos (ml/data/own/)
+    are always kept; the rest of the cap, max(0, cap - own), goes to the other
+    sources' samples, the first by SHA-1 of the source path. `capped`, if given,
+    gets {label: removed} for each class that lost samples."""
     keep = set()
-    by_label = collections.defaultdict(list)
+    by_label = collections.defaultdict(lambda: ([], []))
     for i, s in enumerate(samples):
         if s.split == 'train':
-            by_label[s.label].append(i)
-    for idx in by_label.values():
-        keep.update(sorted(idx, key=lambda i: _cap_key(samples[i], root))[:cap])
+            by_label[s.label][0 if _is_own(s, root) else 1].append(i)
+    for label, (own, other) in by_label.items():
+        keep.update(own)
+        room = max(0, cap - len(own))
+        keep.update(sorted(other, key=lambda i: _cap_key(samples[i], root))[:room])
+        removed = max(0, len(other) - room)
+        if removed and capped is not None:
+            capped[label] = removed
     return [s for i, s in enumerate(samples) if s.split != 'train' or i in keep]
 
 
-def collect(config, root, strict=True):
+def collect(config, root, strict=True, capped=None):
     """Every planned sample. strict=False turns a missing COCO annotations file into a
-    warning (zero samples from it); an unknown category name is always an error."""
+    warning (zero samples from it); an unknown category name is always an error.
+    `capped`, if given, is filled with {label: removed} by the maxTrain cap."""
     root = Path(root)
     _validate(config)
     tp = config['testPercent']
@@ -226,13 +245,13 @@ def collect(config, root, strict=True):
                 split = _resolve_split(src['split'], _rel(p, root), tp)
                 samples.append(Sample(label, split, p, None, tag))
         if config.get('ownPhotos'):
-            for rel_dir, split in (('ml/data/own', 'train'), ('ml/data/own-test', 'test')):
+            for rel_dir, split in ((OWN_TRAIN_DIR, 'train'), ('ml/data/own-test', 'test')):
                 for p in _images_in(root / rel_dir / label):
                     samples.append(Sample(label, split, p, None, 'own'))
     if config.get('ownPhotos'):
         samples += _unlisted_samples(root)
     if 'maxTrain' in config:
-        samples = _cap_train(samples, config['maxTrain'], root)
+        samples = _cap_train(samples, config['maxTrain'], root, capped)
     return samples
 
 
@@ -258,10 +277,18 @@ def find_leaks(samples):
                   for d in by_split['train'].keys() & by_split['test'].keys())
 
 
+def train_short(counts, min_train):
+    """Labels short of training photos: the only ones --drop-underfilled drops."""
+    return sorted(label for label, c in counts.items() if c.get('train', 0) < min_train)
+
+
 def summarize(counts, min_train, min_test):
-    under = [label for label, c in counts.items()
-             if c.get('train', 0) < min_train or c.get('test', 0) < min_test]
-    return {'counts': counts, 'underfilled': sorted(under)}
+    """underfilled: short of train or test photos. undermeasured: enough train
+    photos but short of test photos (their train data is never dropped)."""
+    short_train = set(train_short(counts, min_train))
+    short_test = {label for label, c in counts.items() if c.get('test', 0) < min_test}
+    return {'counts': counts, 'underfilled': sorted(short_train | short_test),
+            'undermeasured': sorted(short_test - short_train)}
 
 
 def _out_name(sample, dest_dir):
@@ -350,10 +377,10 @@ def unwipeable_reason(out):
     return None
 
 
-def guarded_drops(underfilled, config):
-    """Underfilled labels whose bin must not be dropped without consent."""
+def guarded_drops(short, config):
+    """Train-short labels whose bin must not be dropped without consent."""
     classes = config['classes']
-    return sorted(l for l in underfilled
+    return sorted(l for l in short
                   if l in classes and classes[l].get('bin') in GUARDED_BINS)
 
 
@@ -370,7 +397,8 @@ def main(argv=None):
     ap.add_argument('--root', default=str(Path(__file__).resolve().parent.parent),
                     help='base for relative paths in the config (default: repo root)')
     ap.add_argument('--drop-underfilled', action='store_true',
-                    help='leave short classes out of training (their test photos stay)')
+                    help='leave classes short of train photos out of training '
+                         '(their test photos stay)')
     ap.add_argument('--allow-drop-hazard', action='store_true',
                     help='with --drop-underfilled, also drop short hhw/center classes')
     ap.add_argument('--check', action='store_true',
@@ -381,7 +409,8 @@ def main(argv=None):
     try:
         with open(args.config, encoding='utf-8') as fh:
             config = json.load(fh)
-        samples = collect(config, root, strict=args.check)
+        capped = {}
+        samples = collect(config, root, strict=args.check, capped=capped)
     except (OSError, ValueError) as e:
         print(f'config error: {e}', file=sys.stderr)
         return 1
@@ -416,8 +445,7 @@ def main(argv=None):
 
     guard = args.drop_underfilled and not args.allow_drop_hazard
     if guard:
-        short = summarize(class_planned, config['minTrain'], config['minTest'])['underfilled']
-        blocked = guarded_drops(short, config)
+        blocked = guarded_drops(train_short(class_planned, config['minTrain']), config)
         if blocked:
             _refuse_guarded(blocked)
             return 1
@@ -441,16 +469,17 @@ def main(argv=None):
 
     if guard:
         # Unreadable files or tiny crops can make a class short only after writing.
-        blocked = guarded_drops(summary['underfilled'], config)
+        blocked = guarded_drops(train_short(counts, config['minTrain']), config)
         if blocked:
             for split in ('train', 'test'):
                 shutil.rmtree(out / split, ignore_errors=True)
             _refuse_guarded(blocked)
             return 1
 
-    summary['dropped'] = list(summary['underfilled']) if args.drop_underfilled else []
+    summary['dropped'] = train_short(counts, config['minTrain']) if args.drop_underfilled else []
     for label in summary['dropped']:
         shutil.rmtree(out / 'train' / label, ignore_errors=True)
+    summary['capped'] = dict(sorted(capped.items()))
     summary['open_set'] = open_set
     summary['unreadable'] = stats['unreadable']
     summary['orientation_mismatch'] = stats['orientation_mismatch']
@@ -458,6 +487,8 @@ def main(argv=None):
     (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     for label, c in counts.items():
         flag = '  <-- short' if label in summary['underfilled'] else ''
+        if label in summary['undermeasured']:
+            flag = '  <-- short of test photos (train kept)'
         if label in summary['dropped']:
             flag = '  <-- short, train dropped (test kept)'
         print(f'{label}: train {c["train"]}/{config["minTrain"]}, '

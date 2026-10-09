@@ -170,6 +170,53 @@ class CollectTests(TmpRoot):
         again = prepare_data.collect(cfg, self.root)
         self.assertEqual(sorted(s.src.name for s in again if s.split == 'train'), train)
 
+    def test_max_train_never_removes_own_photos(self):
+        # 756 photos from another source plus 40 of your own, cap 500: every own
+        # photo stays and the other 460 are the first by SHA-1.
+        cfg = {'model': 'T', 'ownPhotos': True, 'testPercent': 15, 'minTrain': 1,
+               'minTest': 1, 'maxTrain': 500, 'classes': {'x': {'bin': 'recycle', 'sources': [
+                   {'type': 'folder', 'path': 'f', 'split': 'train'}]}}}
+        (self.root / 'f').mkdir()
+        (self.root / 'ml/data/own/x').mkdir(parents=True)
+        for i in range(756):
+            (self.root / 'f' / f'img_{i}.jpg').touch()
+        for i in range(40):
+            (self.root / 'ml/data/own/x' / f'mine_{i}.jpg').touch()
+        capped = {}
+        train = [s for s in prepare_data.collect(cfg, self.root, capped=capped)
+                 if s.split == 'train']
+        own = [s for s in train if s.src.name.startswith('mine_')]
+        others = sorted(s.src.name for s in train if not s.src.name.startswith('mine_'))
+        self.assertEqual(len(own), 40)
+        self.assertEqual(len(others), 460)
+        expected = sorted(sorted((f'img_{i}.jpg' for i in range(756)),
+                                 key=lambda n: prepare_data.hashlib.sha1(
+                                     f'f/{n}'.encode()).hexdigest())[:460])
+        self.assertEqual(others, expected)
+        self.assertEqual(capped, {'x': 296})
+
+    def test_max_train_below_own_count_keeps_all_own(self):
+        cfg = {'model': 'T', 'ownPhotos': True, 'testPercent': 15, 'minTrain': 1,
+               'minTest': 1, 'maxTrain': 2, 'classes': {'x': {'bin': 'recycle', 'sources': [
+                   {'type': 'folder', 'path': 'f', 'split': 'train'}]}}}
+        (self.root / 'f').mkdir()
+        (self.root / 'ml/data/own/x').mkdir(parents=True)
+        for i in range(3):
+            (self.root / 'f' / f'img_{i}.jpg').touch()
+            (self.root / 'ml/data/own/x' / f'mine_{i}.jpg').touch()
+        capped = {}
+        train = [s for s in prepare_data.collect(cfg, self.root, capped=capped)
+                 if s.split == 'train']
+        self.assertEqual(sorted(s.src.name for s in train), ['mine_0.jpg', 'mine_1.jpg', 'mine_2.jpg'])
+        self.assertEqual(capped, {'x': 3})
+
+    def test_max_train_uncapped_classes_not_listed(self):
+        for i in range(3):
+            make_jpeg(self.root / 'f' / f'img_{i}.jpg')
+        capped = {}
+        prepare_data.collect(self.max_train_cfg(maxTrain=4), self.root, capped=capped)
+        self.assertEqual(capped, {})
+
     def test_max_train_absent_keeps_everything(self):
         for i in range(10):
             make_jpeg(self.root / 'f' / f'img_{i}.jpg')
@@ -247,7 +294,13 @@ class LeakAndSummaryTests(TmpRoot):
                   'c': {'train': 40, 'test': 9}}
         s = prepare_data.summarize(counts, 40, 10)
         self.assertEqual(s['underfilled'], ['b', 'c'])
+        self.assertEqual(s['undermeasured'], ['c'])
         self.assertEqual(s['counts'], counts)
+
+    def test_train_short(self):
+        counts = {'a': {'train': 40, 'test': 10}, 'b': {'train': 3, 'test': 10},
+                  'c': {'train': 40, 'test': 9}, 'd': {'train': 0, 'test': 0}}
+        self.assertEqual(prepare_data.train_short(counts, 40), ['b', 'd'])
 
 
 class MainTests(TmpRoot):
@@ -312,6 +365,45 @@ class MainTests(TmpRoot):
         self.assertEqual(self.run_main(cfg, '--drop-underfilled', '--allow-drop-hazard'), 0)
         summary = json.loads((self.root / 'out' / 'summary.json').read_text())
         self.assertEqual(summary['dropped'], ['foam', 'paint', 'x'])
+
+    def test_drop_underfilled_keeps_train_of_classes_short_only_of_test_photos(self):
+        # paint (hhw) has enough train photos but too few test photos: it is
+        # undermeasured, keeps its training data and does not trigger the refusal.
+        # x is short of train photos and is dropped.
+        for i in range(2):
+            make_jpeg(self.root / f'ml/data/own/paint/{i}.jpg', color=(10 + i, 0, 0))
+        make_jpeg(self.root / 'ml/data/own-test/paint/t.jpg', color=(0, 10, 0))
+        make_jpeg(self.root / 'ml/data/own/x/a.jpg', color=(0, 0, 10))
+        for i in range(2):
+            make_jpeg(self.root / f'ml/data/own-test/x/{i}.jpg', color=(0, 20 + i, 20))
+        cfg = self.write_config({'paint': {'bin': 'hhw', 'sources': []},
+                                 'x': {'bin': 'recycle', 'sources': []}},
+                                minTrain=2, minTest=2)
+        self.assertEqual(self.run_main(cfg, '--drop-underfilled'), 0)
+        out = self.root / 'out'
+        summary = json.loads((out / 'summary.json').read_text())
+        self.assertEqual(summary['underfilled'], ['paint', 'x'])
+        self.assertEqual(summary['undermeasured'], ['paint'])
+        self.assertEqual(summary['dropped'], ['x'])
+        self.assertEqual(len(list((out / 'train' / 'paint').iterdir())), 2)
+        self.assertFalse((out / 'train' / 'x').exists())
+
+    def test_summary_lists_capped_classes(self):
+        for i in range(5):
+            make_jpeg(self.root / f'f/{i}.jpg', color=(30 + i, 0, 0))
+        for i in range(2):
+            make_jpeg(self.root / f'ml/data/own/x/{i}.jpg', color=(0, 30 + i, 0))
+        make_jpeg(self.root / 'ml/data/own/y/a.jpg', color=(0, 0, 30))
+        cfg = self.write_config({'x': {'bin': 'recycle', 'sources': [
+            {'type': 'folder', 'path': 'f', 'split': 'train'}]},
+            'y': {'bin': 'recycle', 'sources': []}}, maxTrain=4)
+        self.assertEqual(self.run_main(cfg), 0)
+        out = self.root / 'out'
+        summary = json.loads((out / 'summary.json').read_text())
+        self.assertEqual(summary['capped'], {'x': 3})
+        names = sorted(p.name for p in (out / 'train' / 'x').iterdir())
+        self.assertEqual(sum(n.startswith('own_') for n in names), 2)
+        self.assertEqual(len(names), 4)
 
     def test_drop_refusal_also_covers_classes_short_after_unreadables(self):
         # Planned counts look full (2 train, 1 test with minTrain 2), but one
