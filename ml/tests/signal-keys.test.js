@@ -19,21 +19,27 @@ function load() {
     SRC + '\nreturn { signalKeys, isBroadKey, Corrections };')(store, ITEMS, VisualMemory, 'c');
 }
 
-test('item-model top candidate gives an itm: key', () => {
+test('itemKey gives an itm: key', () => {
   const { signalKeys } = load();
-  assert.deepStrictEqual(signalKeys({ items: ['Aluminum can'] }), [['itm:Aluminum can', 0.75]]);
+  assert.deepStrictEqual(signalKeys({ itemKey: 'Aluminum can' }), [['itm:Aluminum can', 0.75]]);
 });
 
-test('only the top item candidate is keyed', () => {
+test('chooser candidates (items) never give an itm: key', () => {
   const { signalKeys } = load();
-  assert.deepStrictEqual(signalKeys({ items: ['Aluminum can', 'Soup or vegetable can'] }),
+  assert.deepStrictEqual(signalKeys({ items: ['Aluminum can'], itemKey: null }), []);
+  assert.deepStrictEqual(signalKeys({ items: ['Aluminum can', 'Soup or vegetable can'] }), []);
+  assert.deepStrictEqual(signalKeys({ items: ['Soup or vegetable can'], itemKey: 'Aluminum can' }),
     [['itm:Aluminum can', 0.75]]);
 });
 
 test('no items gives no keys', () => {
   const { signalKeys } = load();
-  assert.deepStrictEqual(signalKeys({ items: [] }), []);
+  assert.deepStrictEqual(signalKeys({ items: [], itemKey: null }), []);
   assert.deepStrictEqual(signalKeys(null), []);
+});
+
+test('handlePhoto resets itemKey for every photo', () => {
+  assert.match(HTML, /_lastScanSignals = \{[^}]*items: \[\], itemKey: null \}/);
 });
 
 test('classes still give cls: keys', () => {
@@ -52,7 +58,7 @@ test('itm: and cls: are broad keys; bc: and txt: are not', () => {
 
 test('a correction recorded on the item-model path is found again', () => {
   const { Corrections } = load();
-  const sig = { items: ['Aluminum can'] };
+  const sig = { items: ['Aluminum can'], itemKey: 'Aluminum can' };
   assert.strictEqual(Corrections.record(sig, 'Aerosol can (hairspray, spray paint)'), 1);
   const hit = Corrections.lookup(sig, 0.5);
   assert.strictEqual(hit.key, 'itm:Aluminum can');
@@ -61,12 +67,17 @@ test('a correction recorded on the item-model path is found again', () => {
 
 test('a once-taught itm: key does not override a confident pipeline', () => {
   const { Corrections } = load();
-  const sig = { items: ['Aluminum can'] };
+  const sig = { items: ['Aluminum can'], itemKey: 'Aluminum can' };
   Corrections.record(sig, 'Aerosol can (hairspray, spray paint)');
   assert.strictEqual(Corrections.lookup(sig, 0.8), null);
   assert.ok(Corrections.lookup(sig, null));
   Corrections.record(sig, 'Aerosol can (hairspray, spray paint)');
   assert.strictEqual(Corrections.lookup(sig, 0.8).hits, 2);
+});
+
+test('a not_waste scan records nothing on its chooser candidates', () => {
+  const { Corrections } = load();
+  assert.strictEqual(Corrections.record({ items: ['Aluminum can'], itemKey: null }, 'Paper bag'), 0);
 });
 
 test('both broad-key gates use isBroadKey', () => {

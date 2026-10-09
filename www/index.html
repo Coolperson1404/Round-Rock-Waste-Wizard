@@ -3639,9 +3639,12 @@
         const n = String(c || '').toLowerCase().split(',')[0].trim();
         if (n) keys.push(['cls:' + n, 0.75]);
       });
-      // The item model's top candidate (an ITEMS name). MobileNet classes are
-      // empty when the item model ran, so without this nothing would be learned.
-      if (sig.items && sig.items.length) keys.push(['itm:' + sig.items[0], 0.75]);
+      // The item model's top item (an ITEMS name), set only when it answered or
+      // asked. sig.items holds chooser candidates and is never a key: a
+      // not_waste scan has candidates but nothing to learn against. MobileNet
+      // classes are empty when the item model ran, so without this nothing would
+      // be learned.
+      if (sig.itemKey) keys.push(['itm:' + sig.itemKey, 0.75]);
       return keys;
     }
 
@@ -3653,19 +3656,41 @@
       return /^(cls|itm):/.test(k);
     }
 
+    /* May a learned correction be asserted against this incoming result? A
+       broad key must never move an answer out of hazardous waste, however many
+       times it was taught: not when the incoming result is hhw and the learned
+       item is not, and not when the item model asked because a hazardous item
+       was a plausible runner-up (hazardItem). Specific keys (bc:, txt:) are
+       this exact item and always may. */
+    function learnedMayAssert(learned, incomingCat, hazardItem) {
+      if (!learned || !learned.item) return false;
+      if (!isBroadKey(learned.key)) return true;
+      if (incomingCat === 'hhw' && learned.item.cat !== 'hhw') return false;
+      return !hazardItem;
+    }
+
     /* ---------- trained material classifier (iOS only) ----------
-       A small Core ML model trained on TrashNet. It only has to separate six
-       materials instead of a thousand ImageNet classes, which is why it avoids
-       the failure that mattered most: ImageNet calls an aluminium can "hair
-       spray" at 67% and the app then routes a recyclable can to hazardous
-       waste. Measured on twelve real photos it got the right bin 10/12 against
-       the old path's 7/12.
+       A small Core ML model (WasteMaterial.mlmodel) that names a material, not
+       an item. The first build was trained on TrashNet's six materials;
+       ml/materials.json retrains it on the Garbage Dataset's ten classes
+       (adding battery, food, clothes and shoes). WasteModels.MATERIAL_TO_ITEM
+       maps each label to an ITEMS entry. A handful of materials instead of a
+       thousand ImageNet classes is why it avoids the failure that mattered
+       most: ImageNet calls an aluminium can "hair spray" at 67% and the app
+       then routes a recyclable can to hazardous waste.
 
        It still only sees material, never the specific item, so it ranks below
-       the barcode, the printed label and visual memory — all of which identify
-       the actual object. */
+       the barcode, the printed label, visual memory and the item model, and is
+       capped to a suggestion whenever the item model ran. */
     function matchMaterialPrediction(materials) {
-      return typeof WasteModels === 'undefined' ? null : WasteModels.interpretMaterials(materials, ITEMS);
+      if (typeof WasteModels === 'undefined') {
+        if (!matchMaterialPrediction.warned) {
+          matchMaterialPrediction.warned = true;
+          console.warn('waste-models.js not loaded; material fallback disabled');
+        }
+        return null;
+      }
+      return WasteModels.interpretMaterials(materials, ITEMS);
     }
 
     /* ---------- visual memory ----------
@@ -3920,6 +3945,23 @@
 
       const learned = Corrections.lookup(sig, conf);
 
+      // A broad key must not move this result out of hazardous waste, however
+      // often it was taught: ask, listing what was learned, what the pipeline
+      // saw and the hazardous item.
+      const hazardItem = extra && extra.hazardItem ? extra.hazardItem : null;
+      if (learned && !learnedMayAssert(learned, it.cat, extra && extra.hazardItem)) {
+        const incoming = ITEMS.find(i => i.n === it.n) || search(it.n)[0];
+        const cands = [];
+        [learned.item, incoming, hazardItem].concat(buildCandidates(learned.item, sig))
+          .forEach(c => { if (c && cands.length < 4 && !cands.some(x => x.n === c.n)) cands.push(c); });
+        return showItemChooser({
+          title: 'Is this the same one again?',
+          lead: `Last time something like this turned out to be a ${learned.item.n}. Is that right?`,
+          candidates: cands,
+          signals: sig
+        });
+      }
+
       // A correction matched only on a broad key (cls: or itm:) is weak evidence: the
       // ImageNet class "water bottle" covers a disposable PET bottle and a steel
       // flask alike, so teaching one must not silently relabel the other. When
@@ -3977,6 +4019,16 @@
       return showAnswer(it, Object.assign({}, extra, { fixable: true, signals: sig }));
     }
 
+    /* What the item model contributes to _lastScanSignals: its guesses for the
+       chooser (whatever the verdict, even none) and the correction key, which
+       is the top item only when it answered or asked. */
+    function itemModelSignals(predictions, v) {
+      return {
+        items: WasteModels.itemCandidates(predictions, ITEMS).map(i => i.n),
+        itemKey: v && (v.kind === 'answer' || v.kind === 'ask') ? v.item.n : null
+      };
+    }
+
     async function handlePhoto(file) {
       if (!file) return;
 
@@ -4009,7 +4061,7 @@
       // Step 0: one native Vision pass (iOS app only) covering barcode, text
       // and classification at once. Everything downstream reads the cache, and
       // every step still works when this returns null.
-      _lastScanSignals = { barcode: null, textTokens: [], classes: [], featureprint: null, items: [] };
+      _lastScanSignals = { barcode: null, textTokens: [], classes: [], featureprint: null, items: [], itemKey: null };
       // Kept so a low-confidence result can be escalated to the cloud without
       // re-encoding the photo.
       _lastScanDataUrl = dataUrl;
@@ -4129,7 +4181,7 @@
       if (itemModelRan) {
         const v = WasteModels.interpretItems(_nativeVisionForCurrentPhoto.items, ITEMS,
           { confirmBelow: CONFIRM_BELOW });
-        _lastScanSignals.items = v ? v.candidates.map(i => i.n) : [];
+        Object.assign(_lastScanSignals, itemModelSignals(_nativeVisionForCurrentPhoto.items, v));
         if (v && v.kind === 'not_waste') {
           // What the user taught the app outranks the model's "nothing here":
           // hand a learned object to deliverScanResult, which re-checks visual
@@ -4159,7 +4211,8 @@
             confidence: v.confidence,
             badge: v.badge,
             badgeIcon: v.item.cat === 'recycle' ? 'recycle' : 'bolt',
-            badgeSub: 'On-device item model'
+            badgeSub: 'On-device item model',
+            hazardItem: v.hazard
           });
           return;
         }
@@ -4297,7 +4350,9 @@
           await deliverScanResult({
             n: mat.item, cat: mat.cat, note: item && item.note ? item.note : ''
           }, {
-            why: mat.why, confidence: mat.confidence,
+            why: mat.why,
+            // Like MobileNet: only a suggestion when the item model ran.
+            confidence: itemModelRan ? Math.min(mat.confidence, CONFIRM_BELOW - 0.01) : mat.confidence,
             badge: mat.badge, badgeIcon: mat.badgeIcon,
             badgeSub: 'On-device material model'
           });
