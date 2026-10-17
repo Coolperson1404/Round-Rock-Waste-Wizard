@@ -216,12 +216,14 @@ test('itemModelRan', () => {
 });
 
 test('interpretMaterials', () => {
-  const m = WM.interpretMaterials([{ value: 'battery', confidence: 0.8 }], ITEMS);
+  const m = WM.interpretMaterials([{ value: 'battery', confidence: 0.9 }], ITEMS);
   assert.strictEqual(m.match, 'Alkaline battery (AA, AAA, 9V)');
   assert.strictEqual(m.cat, 'hhw');
-  assert.strictEqual(m.badge, 'Material: Battery (80%)');
+  assert.strictEqual(m.badge, 'Material: Battery (90%)');
   assert.strictEqual(m.item, 'Battery item');
-  assert.strictEqual(m.confidence, 0.8);
+  assert.strictEqual(m.confidence, 0.9);
+  // Below the gate-measured 0.85 threshold the material model gives no answer.
+  assert.strictEqual(WM.interpretMaterials([{ value: 'battery', confidence: 0.8 }], ITEMS), null);
   assert.strictEqual(WM.interpretMaterials([{ value: 'battery', confidence: 0.5 }], ITEMS), null);
   assert.strictEqual(WM.interpretMaterials([{ value: 'unobtainium', confidence: 0.9 }], ITEMS), null);
 });

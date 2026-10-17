@@ -69,8 +69,8 @@
     trash: { item: 'Plastic cutlery, straws, cups', name: 'Non-recyclable waste' }
   };
 
-  /* Below this a material guess is not worth acting on. */
-  const MATERIAL_MIN_CONFIDENCE = 0.60;
+  /* Gate-measured threshold: at 0.85 the 10-class material model has 0 battery misses on the holdout. */
+  const MATERIAL_MIN_CONFIDENCE = 0.85;
   /* Item model: show as a suggestion at or above ITEM_SUGGEST, act on it at or
      above ITEM_ACCEPT. ITEM_ACCEPT is a placeholder; a later task sets the real value. */
   const ITEM_SUGGEST = 0.35;

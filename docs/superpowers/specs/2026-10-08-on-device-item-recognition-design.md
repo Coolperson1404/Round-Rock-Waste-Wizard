@@ -172,7 +172,10 @@ as the baseline. A 20-photo device checklist is recorded before and after.
 | Hazardous (`hhw`) photos answered into another bin at `ITEM_ACCEPT` | 0 |
 
 **Material model target:** ≥ 90 % top-1 on a hash-split 15 % holdout of the
-Garbage Dataset.
+Garbage Dataset. The app answers from the material fallback only at or above
+0.85 (`MATERIAL_MIN_CONFIDENCE`), and the gate is measured at that threshold
+(`report.py --confirm-below 0.85`): at the earlier 0.60 two holdout batteries
+were answered into the wrong bin, at 0.85 none are.
 
 If a target is missed, the model does not ship. We add photos for the worst
 classes (listed in the report) and retrain.
