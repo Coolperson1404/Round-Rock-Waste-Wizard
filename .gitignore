@@ -41,3 +41,14 @@ ml/data/
 ml/build/
 /waste-models.js
 Waste Wizard - Round Rock/Waste Wizard - Round Rock/waste-models.js
+
+# Local datasets, generated graph and personal tool config — not part of the repo
+/Garbage Dataset/
+graphify-out/
+.claude/
+
+# Copies that scripts/sync-targets.sh writes into the SwiftUI target from www/
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/index.html
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/leaflet.css
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/leaflet.js
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/trainer.html

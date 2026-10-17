@@ -1,0 +1,43 @@
+# Vendored third-party bundles. These are minified, so every symbol they
+# contribute is a mangled name like `zxe` or `D8`; before this file they
+# dominated the graph's community hubs and drowned out the real code.
+www/tf.min.js
+www/mobilenet.min.js
+www/leaflet.js
+www/leaflet.css
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/leaflet.js
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/leaflet.css
+
+# Bundled MobileNet weights: a weight manifest and 15MB of binary shards.
+www/mobilenet-model.json
+www/group1-shard*.bin
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/mobilenet-model.json
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/group1-shard*.bin
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/tf.min.js
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/mobilenet.min.js
+mobilenet-model.json
+tf.min.js
+mobilenet.min.js
+group1-shard*.bin
+
+# Copies of www/index.html kept byte-identical by scripts/sync-targets.sh.
+# Indexing them would triple-count the same application.
+RoundRockWasteWizard_5.html
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/index.html
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/trainer.html
+
+# Generated native asset catalogues and launcher/splash images.
+android/app/src/main/res/
+ios/App/App/Assets.xcassets/
+Waste Wizard - Round Rock/Waste Wizard - Round Rock/Assets.xcassets/
+
+# Capacitor/Gradle scaffolding, not code anyone edits here.
+android/gradlew
+android/*.gradle
+android/app/*.gradle
+android/app/src/androidTest/
+android/app/src/test/
+
+# Build output.
+graphify-out/
+node_modules/
