@@ -50,4 +50,23 @@ assert labels == "glass\npaper\n", repr(labels)
 ' "$PREDS" "$LABELS"
 [ ! -e "$SESSION" ] || { echo "session dir should be deleted after a successful train: $SESSION" >&2; exit 1; }
 
+echo "== refuse unsafe session dirs (exit 1, nothing deleted)"
+expect_refusal() { # description, expected-substring, then the train args
+  local what="$1" want="$2"; shift 2
+  local err rc=0
+  err="$(swift "$REPO/ml/train.swift" "$@" 2>&1 >/dev/null)" || rc=$?
+  [ "$rc" -eq 1 ] || { echo "$what: expected exit 1, got $rc" >&2; exit 1; }
+  case "$err" in *"$want"*) ;; *) echo "$what: stderr lacks '$want': $err" >&2; exit 1 ;; esac
+}
+# A pre-existing, non-empty session dir without fingerprint.txt is not ours to delete.
+mkdir -p "$WORK/foreign/Foreign.session"
+echo keep > "$WORK/foreign/Foreign.session/precious.txt"
+expect_refusal "foreign session dir" "not a training session" \
+  --train "$DATA/train" --model-out "$WORK/foreign/Foreign.mlmodel" --iterations 5
+[ -f "$WORK/foreign/Foreign.session/precious.txt" ] || { echo "foreign session dir was modified" >&2; exit 1; }
+# A session dir inside the training dir would be scanned as images and could delete them.
+expect_refusal "session inside train dir" "overlaps the training directory" \
+  --train "$DATA/train" --model-out "$DATA/train/glass/Inside.mlmodel" --iterations 5
+[ ! -e "$DATA/train/glass/Inside.session" ] || { echo "session was created inside the train dir" >&2; exit 1; }
+
 echo "SMOKE OK"

@@ -22,8 +22,12 @@ func fail(_ message: String) -> Never {
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
-// Bump when ModelParameters below change, so stale sessions are not resumed.
-let parametersVersion = "params-v1:split=automatic;aug=crop,rotation,blur,exposure,flip;scenePrint=2;logistic"
+// The model configuration. Both the ModelParameters and the session fingerprint are
+// built from these constants, so a changed setting can never resume a stale session.
+let validationStrategy = MLImageClassifier.ModelParameters.ValidationData.split(strategy: .automatic)
+let augmentationOptions: MLImageClassifier.ImageAugmentationOptions = [.crop, .rotation, .blur, .exposure, .flip]
+let featureExtractor = MLImageClassifier.FeatureExtractorType.scenePrint(revision: 2)
+let classifierKind = MLImageClassifier.ModelParameters.ClassifierType.logisticRegressor
 
 var trainPath: String?
 var modelOut: String?
@@ -75,8 +79,24 @@ if let subpaths = try? fm.subpathsOfDirectory(atPath: trainURL.path) {
     }
 }
 fingerprintLines.sort()
-let fingerprintInput = fingerprintLines.joined(separator: "\n") + "\niterations=\(iterations)\n\(parametersVersion)\n"
+let parametersDescription = [
+    "validation=\(String(describing: validationStrategy))",
+    "augmentation=\(String(describing: augmentationOptions))",
+    "featureExtractor=\(String(describing: featureExtractor))",
+    "classifier=\(String(describing: classifierKind))",
+].joined(separator: ";")
+let fingerprintInput = fingerprintLines.joined(separator: "\n") + "\niterations=\(iterations)\n\(parametersDescription)\n"
 let fingerprint = SHA256.hash(data: Data(fingerprintInput.utf8)).map { String(format: "%02x", $0) }.joined()
+
+// Never let the session dir (which may be deleted) overlap the training images.
+let sessionKeptNote = "(session kept at \(sessionURL.path); re-run to resume, or delete it to force a fresh start)"
+do {
+    let train = trainURL.resolvingSymlinksInPath().standardizedFileURL.path
+    let session = sessionURL.resolvingSymlinksInPath().standardizedFileURL.path
+    if session == train || session.hasPrefix(train + "/") || train.hasPrefix(session + "/") {
+        fail("refusing to use session directory \(sessionURL.path): it overlaps the training directory \(trainPath)")
+    }
+}
 
 do {
     try fm.createDirectory(at: modelURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -91,7 +111,14 @@ do {
     if fm.fileExists(atPath: sessionURL.path), existingFingerprint == fingerprint {
         print("Resuming session in \(sessionURL.path)")
     } else {
-        if fm.fileExists(atPath: sessionURL.path) { try fm.removeItem(at: sessionURL) }
+        if fm.fileExists(atPath: sessionURL.path) {
+            // Only delete a directory that is ours (has a fingerprint) or empty.
+            let contents = try fm.contentsOfDirectory(atPath: sessionURL.path)
+            if !contents.isEmpty && !contents.contains("fingerprint.txt") {
+                fail("refusing to delete \(sessionURL.path): it is not a training session (no fingerprint.txt). Remove or move it, or pick another --model-out")
+            }
+            try fm.removeItem(at: sessionURL)
+        }
         try fm.createDirectory(at: sessionURL, withIntermediateDirectories: true)
         try (fingerprint + "\n").write(to: fingerprintURL, atomically: true, encoding: .utf8)
     }
@@ -100,10 +127,10 @@ do {
 }
 
 let parameters = MLImageClassifier.ModelParameters(
-    validation: .split(strategy: .automatic),
+    validation: validationStrategy,
     maxIterations: iterations,
-    augmentation: [.crop, .rotation, .blur, .exposure, .flip],
-    algorithm: .transferLearning(featureExtractor: .scenePrint(revision: 2), classifier: .logisticRegressor)
+    augmentation: augmentationOptions,
+    algorithm: .transferLearning(featureExtractor: featureExtractor, classifier: classifierKind)
 )
 let sessionParameters = MLTrainingSessionParameters(
     sessionDirectory: sessionURL,
@@ -121,7 +148,7 @@ do {
         sessionParameters: sessionParameters
     )
 } catch {
-    fail("training failed: \(error.localizedDescription)\n(session kept at \(sessionURL.path); re-run to resume)")
+    fail("training failed: \(error.localizedDescription)\n\(sessionKeptNote)")
 }
 
 func accuracy(_ metrics: MLClassifierMetrics) -> String {
@@ -129,23 +156,27 @@ func accuracy(_ metrics: MLClassifierMetrics) -> String {
 }
 
 var subscriptions = Set<AnyCancellable>()
-var finished = false
 
 job.progress.publisher(for: \.fractionCompleted)
-    .throttle(for: .seconds(10), scheduler: RunLoop.main, latest: true)
+    .throttle(for: .seconds(10), scheduler: DispatchQueue.main, latest: true)
     .sink { fraction in
         let phase = (job.progress.userInfo[ProgressUserInfoKey("phase")] as? MLPhase).map { String(describing: $0) } ?? "starting"
         print("progress: \(phase) \(String(format: "%.1f", fraction * 100))%")
     }
     .store(in: &subscriptions)
 
-job.result.sink(
+// Everything below runs on the main queue; dispatchMain() parks the main thread
+// (no polling) and the sinks exit the process explicitly.
+var gotResult = false
+job.result.receive(on: DispatchQueue.main).sink(
     receiveCompletion: { completion in
         if case .failure(let error) = completion {
-            fail("training failed: \(error.localizedDescription)\n(session kept at \(sessionURL.path); re-run to resume)")
+            fail("training failed: \(error.localizedDescription)\n\(sessionKeptNote)")
         }
+        if !gotResult { fail("training ended without a result\n\(sessionKeptNote)") }
     },
     receiveValue: { classifier in
+        gotResult = true
         let isoDate = ISO8601DateFormatter()
         isoDate.formatOptions = [.withFullDate]
         let metadata = MLModelMetadata(
@@ -157,7 +188,7 @@ job.result.sink(
             try classifier.write(to: modelURL, metadata: metadata)
             try (labels.joined(separator: "\n") + "\n").write(to: labelsURL, atomically: true, encoding: .utf8)
         } catch {
-            fail("could not write the model: \(error.localizedDescription)\n(session kept at \(sessionURL.path); re-run to resume)")
+            fail("could not write the model: \(error.localizedDescription)\n\(sessionKeptNote)")
         }
         print("training accuracy: \(accuracy(classifier.trainingMetrics))")
         if imageCount >= 50 {
@@ -168,8 +199,8 @@ job.result.sink(
         print("wrote \(modelURL.path)")
         print("wrote \(labelsURL.path)")
         try? fm.removeItem(at: sessionURL)
-        finished = true
+        exit(0)
     }
 ).store(in: &subscriptions)
 
-while !finished { RunLoop.main.run(until: Date().addingTimeInterval(1)) }
+dispatchMain()
