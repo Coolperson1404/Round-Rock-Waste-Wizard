@@ -1,0 +1,228 @@
+{
+  "n": 1910,
+  "item_top1": 0.9225130890052357,
+  "item_top3": 0.9863874345549738,
+  "bin_acc": 0.974869109947644,
+  "per_class": {
+    "battery": {
+      "n": 106,
+      "acc": 0.9716981132075472
+    },
+    "biological": {
+      "n": 103,
+      "acc": 0.9611650485436893
+    },
+    "cardboard": {
+      "n": 249,
+      "acc": 0.9036144578313253
+    },
+    "clothes": {
+      "n": 308,
+      "acc": 0.9967532467532467
+    },
+    "glass": {
+      "n": 239,
+      "acc": 0.9037656903765691
+    },
+    "metal": {
+      "n": 150,
+      "acc": 0.8733333333333333
+    },
+    "paper": {
+      "n": 223,
+      "acc": 0.8565022421524664
+    },
+    "plastic": {
+      "n": 235,
+      "acc": 0.8978723404255319
+    },
+    "shoes": {
+      "n": 224,
+      "acc": 0.9910714285714286
+    },
+    "trash": {
+      "n": 73,
+      "acc": 0.7808219178082192
+    }
+  },
+  "worst_classes": [
+    "trash",
+    "paper",
+    "metal",
+    "plastic",
+    "cardboard"
+  ],
+  "confusions": [
+    [
+      "cardboard",
+      "paper",
+      17
+    ],
+    [
+      "paper",
+      "cardboard",
+      16
+    ],
+    [
+      "glass",
+      "plastic",
+      13
+    ],
+    [
+      "plastic",
+      "glass",
+      12
+    ],
+    [
+      "metal",
+      "plastic",
+      8
+    ],
+    [
+      "glass",
+      "metal",
+      7
+    ],
+    [
+      "paper",
+      "trash",
+      7
+    ],
+    [
+      "metal",
+      "glass",
+      5
+    ],
+    [
+      "trash",
+      "paper",
+      5
+    ],
+    [
+      "trash",
+      "plastic",
+      5
+    ]
+  ],
+  "hazard_misses": 3,
+  "sweep": [
+    {
+      "t": 0.3,
+      "coverage": 0.9994764397905759,
+      "wrong_bin_rate": 0.025144054478784705,
+      "item_acc": 0.9229963331587219,
+      "accepted": 1909
+    },
+    {
+      "t": 0.35,
+      "coverage": 0.9994764397905759,
+      "wrong_bin_rate": 0.025144054478784705,
+      "item_acc": 0.9229963331587219,
+      "accepted": 1909
+    },
+    {
+      "t": 0.4,
+      "coverage": 0.9973821989528796,
+      "wrong_bin_rate": 0.024671916010498687,
+      "item_acc": 0.9233595800524934,
+      "accepted": 1905
+    },
+    {
+      "t": 0.45,
+      "coverage": 0.993193717277487,
+      "wrong_bin_rate": 0.024248813916710597,
+      "item_acc": 0.9256721138639958,
+      "accepted": 1897
+    },
+    {
+      "t": 0.5,
+      "coverage": 0.9890052356020942,
+      "wrong_bin_rate": 0.023292747485442033,
+      "item_acc": 0.9280042350449974,
+      "accepted": 1889
+    },
+    {
+      "t": 0.55,
+      "coverage": 0.9743455497382199,
+      "wrong_bin_rate": 0.02095647501343364,
+      "item_acc": 0.9355185384202042,
+      "accepted": 1861
+    },
+    {
+      "t": 0.6,
+      "coverage": 0.9643979057591623,
+      "wrong_bin_rate": 0.019543973941368076,
+      "item_acc": 0.9413680781758957,
+      "accepted": 1842
+    },
+    {
+      "t": 0.65,
+      "coverage": 0.9513089005235602,
+      "wrong_bin_rate": 0.018161805173362685,
+      "item_acc": 0.9471656576774904,
+      "accepted": 1817
+    },
+    {
+      "t": 0.7,
+      "coverage": 0.9366492146596859,
+      "wrong_bin_rate": 0.015651201788708775,
+      "item_acc": 0.9536053661263275,
+      "accepted": 1789
+    },
+    {
+      "t": 0.75,
+      "coverage": 0.9272251308900523,
+      "wrong_bin_rate": 0.01355166572557877,
+      "item_acc": 0.9570863918690006,
+      "accepted": 1771
+    },
+    {
+      "t": 0.8,
+      "coverage": 0.9183246073298429,
+      "wrong_bin_rate": 0.013112884834663626,
+      "item_acc": 0.959521094640821,
+      "accepted": 1754
+    },
+    {
+      "t": 0.85,
+      "coverage": 0.8968586387434555,
+      "wrong_bin_rate": 0.010507880910683012,
+      "item_acc": 0.9661412726211325,
+      "accepted": 1713
+    },
+    {
+      "t": 0.9,
+      "coverage": 0.8696335078534031,
+      "wrong_bin_rate": 0.007826610475617099,
+      "item_acc": 0.9747140276941602,
+      "accepted": 1661
+    },
+    {
+      "t": 0.95,
+      "coverage": 0.8303664921465969,
+      "wrong_bin_rate": 0.005674653215636823,
+      "item_acc": 0.980453972257251,
+      "accepted": 1586
+    }
+  ],
+  "max_wrong_bin": 0.02,
+  "confirm_below": 0.85,
+  "hazard_net": false,
+  "hazard_runner_up": null,
+  "recommended": 0.85,
+  "effective_accept": 0.85,
+  "coverage_at_effective": 0.8968586387434555,
+  "wrong_bin_at_effective": 0.010507880910683012,
+  "hazard_misses_at_effective": 0,
+  "center_misses_at_effective": 0,
+  "open_set": {
+    "n": 0,
+    "hhw_n": 0,
+    "accepted_at_effective": 0,
+    "wrong_bin_at_effective": 0
+  },
+  "require": {
+    "item": 0.9
+  },
+  "missed": []
+}
