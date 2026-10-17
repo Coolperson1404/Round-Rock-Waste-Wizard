@@ -27,7 +27,11 @@ for label in glass paper; do
   prune "$DATA/test/$label" 5
 done
 
-echo "== train"
+SESSION="$WORK/model/Smoke.session"
+
+echo "== train (with a stale session dir whose fingerprint does not match)"
+mkdir -p "$SESSION"
+echo "junk-fingerprint" > "$SESSION/fingerprint.txt"
 swift "$REPO/ml/train.swift" --train "$DATA/train" --model-out "$MODEL" --iterations 5
 
 echo "== predict"
@@ -44,5 +48,6 @@ for p in preds:
 labels = open(sys.argv[2]).read()
 assert labels == "glass\npaper\n", repr(labels)
 ' "$PREDS" "$LABELS"
+[ ! -e "$SESSION" ] || { echo "session dir should be deleted after a successful train: $SESSION" >&2; exit 1; }
 
 echo "SMOKE OK"
