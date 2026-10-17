@@ -24,27 +24,48 @@ setvbuf(stdout, nil, _IOLBF, 0)
 
 // The model configuration. Both the ModelParameters and the session fingerprint are
 // built from these constants, so a changed setting can never resume a stale session.
+// String(describing:) loses information (every scenePrint revision prints "ScenePrint"),
+// so the fingerprint uses explicit names that sit next to the values they describe.
 let validationStrategy = MLImageClassifier.ModelParameters.ValidationData.split(strategy: .automatic)
-let augmentationOptions: MLImageClassifier.ImageAugmentationOptions = [.crop, .rotation, .blur, .exposure, .flip]
-let featureExtractor = MLImageClassifier.FeatureExtractorType.scenePrint(revision: 2)
+let validationName = "split-automatic"
+let augmentations: [(name: String, option: MLImageClassifier.ImageAugmentationOptions)] = [
+    ("crop", .crop), ("rotation", .rotation), ("blur", .blur), ("exposure", .exposure), ("flip", .flip),
+]
+let augmentationOptions = augmentations.reduce(into: MLImageClassifier.ImageAugmentationOptions()) { $0.formUnion($1.option) }
+let scenePrintRevision = 2
+let featureExtractor = MLImageClassifier.FeatureExtractorType.scenePrint(revision: scenePrintRevision)
 let classifierKind = MLImageClassifier.ModelParameters.ClassifierType.logisticRegressor
+let classifierName = "logisticRegressor"
+
+/// The parameter component of the session fingerprint. `revision` is a parameter only so
+/// `--print-fingerprint` can show that different revisions yield different fingerprints.
+func parametersDescription(scenePrintRevision revision: Int = scenePrintRevision) -> String {
+    [
+        "validation=\(validationName)",
+        "augmentation=\(augmentations.map { $0.name }.joined(separator: ","))",
+        "featureExtractor=scenePrint-r\(revision)",
+        "classifier=\(classifierName)",
+    ].joined(separator: ";")
+}
 
 var trainPath: String?
 var modelOut: String?
 var iterations = 25
+var printFingerprint = false  // debug aid: print the session fingerprint and exit
 
 var args = CommandLine.arguments.dropFirst().makeIterator()
 while let flag = args.next() {
     switch flag {
     case "--train": trainPath = args.next()
     case "--model-out": modelOut = args.next()
+    case "--print-fingerprint": printFingerprint = true
     case "--iterations":
         guard let raw = args.next(), let n = Int(raw), n > 0 else { fail("--iterations needs a positive integer") }
         iterations = n
     default: fail("unknown argument: \(flag)")
     }
 }
-guard let trainPath = trainPath, let modelOut = modelOut else {
+guard let trainPath = trainPath, let modelOut = modelOut ?? (printFingerprint ? "unused.mlmodel" : nil) else {
     fail("usage: swift ml/train.swift --train <dir> --model-out <path>.mlmodel --iterations <n>")
 }
 guard modelOut.hasSuffix(".mlmodel") else { fail("--model-out must end in .mlmodel") }
@@ -79,20 +100,36 @@ if let subpaths = try? fm.subpathsOfDirectory(atPath: trainURL.path) {
     }
 }
 fingerprintLines.sort()
-let parametersDescription = [
-    "validation=\(String(describing: validationStrategy))",
-    "augmentation=\(String(describing: augmentationOptions))",
-    "featureExtractor=\(String(describing: featureExtractor))",
-    "classifier=\(String(describing: classifierKind))",
-].joined(separator: ";")
-let fingerprintInput = fingerprintLines.joined(separator: "\n") + "\niterations=\(iterations)\n\(parametersDescription)\n"
-let fingerprint = SHA256.hash(data: Data(fingerprintInput.utf8)).map { String(format: "%02x", $0) }.joined()
+func sessionFingerprint(scenePrintRevision revision: Int = scenePrintRevision) -> String {
+    let input = fingerprintLines.joined(separator: "\n")
+        + "\niterations=\(iterations)\n\(parametersDescription(scenePrintRevision: revision))\n"
+    return SHA256.hash(data: Data(input.utf8)).map { String(format: "%02x", $0) }.joined()
+}
+let fingerprint = sessionFingerprint()
+
+if printFingerprint {
+    print("fingerprint: \(fingerprint)")
+    print("fingerprint scenePrint-r1: \(sessionFingerprint(scenePrintRevision: 1))")
+    print("fingerprint scenePrint-r2: \(sessionFingerprint(scenePrintRevision: 2))")
+    exit(0)
+}
 
 // Never let the session dir (which may be deleted) overlap the training images.
 let sessionKeptNote = "(session kept at \(sessionURL.path); re-run to resume, or delete it to force a fresh start)"
 do {
-    let train = trainURL.resolvingSymlinksInPath().standardizedFileURL.path
-    let session = sessionURL.resolvingSymlinksInPath().standardizedFileURL.path
+    // resolvingSymlinksInPath() skips a path whose last component does not exist yet (a new
+    // session dir), so resolve the deepest existing ancestor and re-append the rest.
+    func canonicalPath(_ url: URL) -> String {
+        var existing = url.standardizedFileURL
+        var rest: [String] = []
+        while !fm.fileExists(atPath: existing.path), existing.path != "/" {
+            rest.insert(existing.lastPathComponent, at: 0)
+            existing = existing.deletingLastPathComponent()
+        }
+        return rest.reduce(existing.resolvingSymlinksInPath()) { $0.appendingPathComponent($1) }.path
+    }
+    let train = canonicalPath(trainURL)
+    let session = canonicalPath(sessionURL)
     if session == train || session.hasPrefix(train + "/") || train.hasPrefix(session + "/") {
         fail("refusing to use session directory \(sessionURL.path): it overlaps the training directory \(trainPath)")
     }

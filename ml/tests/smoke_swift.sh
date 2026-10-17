@@ -69,4 +69,19 @@ expect_refusal "session inside train dir" "overlaps the training directory" \
   --train "$DATA/train" --model-out "$DATA/train/glass/Inside.mlmodel" --iterations 5
 [ ! -e "$DATA/train/glass/Inside.session" ] || { echo "session was created inside the train dir" >&2; exit 1; }
 
+# A symlinked parent that points the (not yet existing) session path into the train dir.
+mkdir -p "$WORK/linkparent"
+ln -s "$DATA/train/glass" "$WORK/linkparent/via"
+expect_refusal "session via symlinked parent" "overlaps the training directory" \
+  --train "$DATA/train" --model-out "$WORK/linkparent/via/deep/Linked.mlmodel" --iterations 5
+[ ! -e "$DATA/train/glass/deep" ] || { echo "session path was created through a symlink" >&2; exit 1; }
+
+echo "== fingerprint depends on the scenePrint revision"
+FP="$(swift "$REPO/ml/train.swift" --train "$DATA/train" --iterations 5 --print-fingerprint)"
+R1="$(printf '%s\n' "$FP" | sed -n 's/^fingerprint scenePrint-r1: //p')"
+R2="$(printf '%s\n' "$FP" | sed -n 's/^fingerprint scenePrint-r2: //p')"
+CUR="$(printf '%s\n' "$FP" | sed -n 's/^fingerprint: //p')"
+[ -n "$R1" ] && [ -n "$R2" ] && [ "$R1" != "$R2" ] || { echo "fingerprints for scenePrint r1/r2 should differ: $FP" >&2; exit 1; }
+[ "$CUR" = "$R2" ] || { echo "current fingerprint should be the scenePrint r2 one: $FP" >&2; exit 1; }
+
 echo "SMOKE OK"
