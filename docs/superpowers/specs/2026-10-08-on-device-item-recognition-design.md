@@ -175,7 +175,11 @@ as the baseline. A 20-photo device checklist is recorded before and after.
 Garbage Dataset. The app answers from the material fallback only at or above
 0.85 (`MATERIAL_MIN_CONFIDENCE`), and the gate is measured at that threshold
 (`report.py --confirm-below 0.85`): at the earlier 0.60 two holdout batteries
-were answered into the wrong bin, at 0.85 none are.
+were answered into the wrong bin, at 0.85 none are. This is not a guarantee.
+The threshold was chosen on the same holdout set it is measured on, so the
+result is in-sample. The worst battery miss at the old threshold scored 0.82,
+so the margin over 0.85 is only about 0.03. The Task 7 device checklist must
+include battery photos (the planned AA battery row) to confirm it on real scans.
 
 If a target is missed, the model does not ship. We add photos for the worst
 classes (listed in the report) and retrain.

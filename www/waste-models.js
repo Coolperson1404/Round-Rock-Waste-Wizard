@@ -69,7 +69,7 @@
     trash: { item: 'Plastic cutlery, straws, cups', name: 'Non-recyclable waste' }
   };
 
-  /* Gate-measured threshold: at 0.85 the 10-class material model has 0 battery misses on the holdout. */
+  /* Gate-measured threshold: at 0.85 the 10-class material model has 0 battery misses on the holdout (selected on the holdout; worst battery miss 0.82). */
   const MATERIAL_MIN_CONFIDENCE = 0.85;
   /* Item model: show as a suggestion at or above ITEM_SUGGEST, act on it at or
      above ITEM_ACCEPT. ITEM_ACCEPT is a placeholder; a later task sets the real value. */
